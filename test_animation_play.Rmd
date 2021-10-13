@@ -77,15 +77,15 @@ df_tracking <- df_tracking %>%
                        y = ifelse(playDirection == "left", 160/3 - y, y))
 
 #Subset for punts
-df_plays <- df_plays %>% 
+df_plays_punts <- df_plays %>% 
             filter(specialTeamsPlayType == 'Punt')
 
 #Subset for Panthers
-df_plays_panthers <- df_plays %>% 
+df_plays_panthers <- df_plays_punts %>% 
             filter(possessionTeam == 'CAR')
 
 #Subset for Patriots
-df_plays_patriots <- df_plays %>% 
+df_plays_patriots <- df_plays_punts %>% 
             filter(possessionTeam == 'NE')
 ```
 
