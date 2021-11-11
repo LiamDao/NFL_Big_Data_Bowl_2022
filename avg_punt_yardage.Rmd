@@ -1,0 +1,206 @@
+---
+title: "avg_punt_returns"
+author: "Liam Dao"
+date: "11/8/2021"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Packages & Read in Data
+```{r packages & read in data, warning = FALSE, message=FALSE}
+#Loading pre-installed libraries
+library(tidyverse)
+library(gganimate)
+library(cowplot)
+library(ggridges)
+library(repr)
+library(gifski)
+library(plotly)
+
+
+#turning off warnings
+options(warn=-1)
+
+#set directory
+setwd("/Users/liamd/Documents/NFL Big Data Bowl/Data/")
+
+
+##reading in non-tracking data
+
+#includes play-by-play info on specific plays
+df_plays <- read_csv("plays.csv",
+                    col_types = cols())
+
+#includes background info for players
+df_players <- read_csv("players.csv",
+                      col_types = cols())
+
+head(df_plays)
+head(df_players)
+
+##Reading tracking data (needs to be done iteratively)
+
+#weeks of NFL season
+seasons <- seq(2018, 2020)
+
+#blank dataframe to store tracking data
+df_tracking <- data.frame()
+
+#iterating through all weeks
+for(s in seasons){
+    
+    #temperory dataframe used for reading season for given iteration
+    df_tracking_temp <- read_csv(paste0("tracking",s,".csv"),
+                                col_types = cols())
+    
+    #storing temporary dataframe in full season dataframe
+    df_tracking <- bind_rows(df_tracking_temp, df_tracking)                            
+    
+}
+
+head(df_tracking)
+
+rm(df_tracking_temp)
+```
+
+
+## Cleaning  Data
+```{r clean data}
+#Standardizing tracking data so its always in direction of punting team.
+df_tracking <- df_tracking %>%
+                mutate(x = ifelse(playDirection == "left", 120-x, x),
+                       y = ifelse(playDirection == "left", 160/3 - y, y))
+
+#Subset for punts
+df_plays_punts <- df_plays %>% 
+            filter(specialTeamsPlayType == 'Punt')
+
+#Add kicker and returner names
+df_plays_punts <- merge(x = df_plays_punts, y = df_players, by.x = "kickerId", by.y = "nflId", all.x = TRUE)
+df_plays_punts <- merge(x = df_plays_punts, y = df_players, by.x = "returnerId", by.y = "nflId", all.x = TRUE)
+
+df_plays_punts <- df_plays_punts %>% 
+  rename(kickerName = displayName.x) %>% 
+  rename(returnerName = displayName.y)
+
+#Change 'OAK' and 'LV' to be 'OAK/LV' since the Raiders moved
+df_plays_punts <- df_plays_punts %>% 
+  mutate(possessionTeam = ifelse(possessionTeam == 'OAK', 'OAK_LV', possessionTeam)) %>% 
+  mutate(possessionTeam = ifelse(possessionTeam == 'LV', 'OAK_LV', possessionTeam))
+
+#Subset for Panthers
+#df_plays_panthers <- df_plays_punts %>% 
+#            filter(possessionTeam == 'CAR')
+
+#Subset for Patriots
+#df_plays_patriots <- df_plays_punts %>% 
+#            filter(possessionTeam == 'NE')
+```
+
+
+## Summary Data on Punt Return Yardage
+```{r summary data}
+#---------------------------- TEAMS ----------------------------------
+#Average punt return yardage by kicking team (lower value better for the team)
+df_avg_punt_team <- df_plays_punts %>% 
+  group_by(possessionTeam) %>% 
+  summarise(avgPuntReturn = mean(kickReturnYardage, na.rm = TRUE)) %>% 
+  rename(kickingTeam = possessionTeam) %>% 
+  arrange(avgPuntReturn) 
+
+## Get obs count where the punt was returned
+team_count <- df_plays_punts %>% 
+  count(possessionTeam, specialTeamsResult == "Return")
+
+team_count <- team_count %>% 
+  filter(`specialTeamsResult == "Return"` == TRUE) %>% 
+  select(-`specialTeamsResult == "Return"`)
+
+## Merge datasets
+df_avg_punt_team <- merge(x = df_avg_punt_team, y = team_count, by.x = "kickingTeam", by.y = "possessionTeam", all.x = TRUE)
+
+## Plot
+ggplot(data = df_avg_punt_team, aes(x = avgPuntReturn, y = n, label = kickingTeam, color = -avgPuntReturn)) + 
+  geom_point() + 
+  scale_x_reverse() +
+  geom_text(aes(label = kickingTeam), hjust = -.3) +
+  scale_color_gradientn(colors = rainbow(5)) +
+  ggtitle("Average Punt Return Against by Team") +
+  ylab("Number of Punts") + 
+  xlab("Average Punt Return Against") + 
+  theme_minimal()
+
+
+#---------------------------- KICKERS ----------------------------------#
+#Average punt return yardage by kicker (lower value better)
+df_avg_punt_kicker <- df_plays_punts %>% 
+  group_by(kickerName) %>% 
+  summarise(avgPuntReturn = mean(kickReturnYardage, na.rm = TRUE)) %>% 
+  arrange(avgPuntReturn)
+
+df_avg_punt_kicker
+
+## Get obs count
+kicker_count <- df_plays_punts %>% 
+  count(kickerName, specialTeamsResult == "Return")
+
+kicker_count <- kicker_count %>% 
+  filter(`specialTeamsResult == "Return"` == TRUE) %>% 
+  select(-`specialTeamsResult == "Return"`)
+
+## Merge datasets
+df_avg_punt_kicker <- merge(x = df_avg_punt_kicker, y = kicker_count, by.x = "kickerName", by.y = "kickerName", all.x = TRUE)
+
+## Plot
+kicker_plot <- ggplot(data = df_avg_punt_kicker, aes(x = avgPuntReturn, y = n, text = kickerName, color = -avgPuntReturn)) + 
+  geom_point() + 
+  scale_x_reverse() +
+  scale_color_gradientn(colors = rainbow(5)) +
+  ggtitle("Average Punt Return Against by Kicker") +
+  ylab("Number of Punts") + 
+  xlab("Average Punt Return Against") + 
+  theme_minimal()
+
+ggplotly(kicker_plot, tooltip = c("text", "x", "y"))
+
+
+#---------------------------- RETURNERS ----------------------------------#
+#Average punt return yardage by returner (higher value better)
+df_avg_punt_returner <- df_plays_punts %>% 
+  group_by(returnerName) %>% 
+  summarise(avgPuntReturn = mean(kickReturnYardage, na.rm = TRUE)) %>%
+  arrange(desc(avgPuntReturn))
+
+df_avg_punt_returner
+
+## Get obs count
+returner_count <- df_plays_punts %>% 
+  count(returnerName, specialTeamsResult == "Return")
+
+returner_count <- returner_count %>% 
+  filter(`specialTeamsResult == "Return"` == TRUE) %>% 
+  select(-`specialTeamsResult == "Return"`)
+
+## Merge datasets
+df_avg_punt_returner <- merge(x = df_avg_punt_returner, y = returner_count, by.x = "returnerName", by.y = "returnerName", all.x = TRUE)
+df_avg_punt_returner <- na.omit(df_avg_punt_returner)
+
+## Plot
+returner_plot <- ggplot(data = df_avg_punt_returner, aes(x = avgPuntReturn, y = n, text = returnerName, color = avgPuntReturn)) + 
+  geom_point() + 
+  scale_color_gradientn(colors = rainbow(5)) +
+  ggtitle("Average Punt Return by Returner") +
+  ylab("Number of Punts") + 
+  xlab("Average Punt Return") + 
+  theme_minimal()
+
+ggplotly(returner_plot, tooltip = c("text", "x", "y"))
+
+
+# Remove unnecessary variables
+rm(list = c('kicker_count', 'team_count', 'returner_count'))
+```
+
