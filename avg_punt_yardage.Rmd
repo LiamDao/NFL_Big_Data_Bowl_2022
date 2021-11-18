@@ -64,6 +64,11 @@ for(s in seasons){
 head(df_tracking)
 
 rm(df_tracking_temp)
+<<<<<<< Updated upstream
+=======
+setwd("C:/Users/liamd/Documents/GitHub/NFL_Big_Data_Bowl_2022")
+write.csv(df_tracking, "df_tracking.csv")
+>>>>>>> Stashed changes
 ```
 
 
@@ -98,6 +103,12 @@ df_plays_punts <- df_plays_punts %>%
 #Subset for Patriots
 #df_plays_patriots <- df_plays_punts %>% 
 #            filter(possessionTeam == 'NE')
+<<<<<<< Updated upstream
+=======
+
+setwd("C:/Users/liamd/Documents/GitHub/NFL_Big_Data_Bowl_2022")
+write.csv(df_plays_punts, "df_plays_punts.csv")
+>>>>>>> Stashed changes
 ```
 
 
