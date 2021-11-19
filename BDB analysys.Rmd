@@ -1,0 +1,234 @@
+---
+title: "Big Data Bowl Analysis"
+author: "Trevor Hughes"
+date: "11/16/2021"
+output: html_document
+---
+
+```{r}
+library(dplyr)
+library(stringr)
+library(sjmisc)
+library(stringr)
+
+```
+
+############################### Data Prep ###############################
+#read in data
+```{r}
+returned2018 = read.csv("C:\\Users\\thughes\\Documents\\returned2018.csv")
+returned2019 = read.csv("C:\\Users\\thughes\\Documents\\returned2019.csv")
+returned2020 = read.csv("C:\\Users\\thughes\\Documents\\returned2020.csv")
+```
+#Filter data to only the the time stamp where the returner first received the punt
+```{r}
+received2018 = returned2018 %>% filter(event == "punt_received")
+received2019 = returned2019 %>% filter(event == "punt_received")
+received2020 = returned2020 %>% filter(event == "punt_received")
+
+```
+
+#Calculate each players distance from the returner
+```{r}
+#Indicates which observations have multiple returners on one play
+received2018$multiple_returners = ifelse(str_detect((received2018$returnerId), ";"), 1, 0)
+sum(received2018$multiple_returners)
+
+received2018 = received2018 %>% filter(multiple_returners == 0)
+
+#Indicates if a player is a returner or not
+received2018$returner = ifelse(received2018$returnerId == received2018$nflId, 1, 0)
+
+#Creates separate dataset with the returners location and joins it with each row in the original data set where the game and play id match
+received2018returners = received2018 %>% filter(returner == 1) %>% select(gameId, playId,x, y) %>% rename(returner_x = x, returner_y = y)
+
+received2018 = left_join(received2018, received2018returners, by = c("gameId", "playId"))
+
+#Calculates the distance of each player from the returner
+received2018 = received2018 %>% mutate(distance = sqrt((returner_x - x)^2 +  (returner_y - y)^2))
+```
+
+#Determine if each player is on the kicking or receiving team
+```{r}
+received2018$playerTeam = ifelse(received2018$team == "away", received2018$visitorTeamAbbr, received2018$homeTeamAbbr)
+
+received2018$kickingTeam = ifelse(received2018$playerTeam == received2018$possessionTeam, 1, 0)
+
+#Indicates if the receiving team is home or away
+received2018$receiveTeamHome = ifelse(received2018$possessionTeam != received2018$homeTeamAbbr, 1, 0)
+
+```
+
+
+```{r}
+#Create empty data frame to use for modeling
+model_set = data.frame(gameId = integer(), playId = integer(),
+                       def1_dist = integer(), def1_s = integer(),
+                       def1_a = integer(), def1_pos = character(),
+                       def2_dist = integer(), def2_s = integer(),
+                       def2_a = integer(), def2_pos = character(),
+                       def3_dist = integer(), def3_s = integer(),
+                       def3_a = integer(), def3_pos = character(),
+                       def4_dist = integer(), def4_s = integer(),
+                       def4_a = integer(), def4_pos = character(),
+                       def5_dist = integer(), def5_s = integer(),
+                       def5_a = integer(), def5_pos = character(),
+                       def6_dist = integer(), def6_s = integer(),
+                       def6_a = integer(), def6_pos = character(),
+                       def7_dist = integer(), def7_s = integer(),
+                       def7_a = integer(), def7_pos = character(),
+                       def8_dist = integer(), def8_s = integer(),
+                       def8_a = integer(), def8_pos = character(),
+                       def9_dist = integer(), def9_s = integer(),
+                       def9_a = integer(), def9_pos = character(),
+                       def10_dist = integer(), def10_s = integer(),
+                       def10_a = integer(), def10_pos = character(),
+                       def11_dist = integer(), def11_s = integer(),
+                       def11_a = integer(), def11_pos = character()
+                       )
+
+# Loops through each unique game and creates a new dataset with each game
+for (games in unique(received2018$gameId)) {
+  x= received2018 %>% filter(gameId == games & kickingTeam == 1)
+  
+  #Loops through each unique play in the game and creates a new dataset for each play
+  for (plays in unique(x$playId)) {
+    y = x %>% filter(playId == plays)
+    
+    #Loops through 11 for each player on the kicking team
+    for (i in 1:11) {
+      #Finds the shortest distance from a defender to the returner saves the value
+      assign(paste0("min", i, sep = ""), min(y$distance, na.rm = TRUE))
+      
+      #Filters to the player with that shortest distance and creates values for their speed, acceleration, and position
+      z = y[which.min(y$distance),]
+      assign(paste0("s", i, sep = ""), z$s)
+      assign(paste0("a", i, sep = ""), z$a)
+      assign(paste0("pos", i, sep = ""), z$position)
+  
+      #Removes that player from the temporary set and loops again
+      y = y[-which.min(y$distance),]
+    }
+    
+    #Prints out all of the values into one data frame
+    model_set[nrow(model_set)+1,] <- c(games, plays, as.integer(min1), s1, a1, pos1,
+                                       min2, s2, a2, pos2,
+                                       min3, s3, a3, pos3,
+                                       min4, s4, a4, pos4,
+                                       min5, s5, a5, pos5,
+                                       min6, s6, a6, pos6,
+                                       min7, s7, a7, pos7,
+                                       min8, s8, a8, pos8,
+                                       min9, s9, a9, pos9,
+                                       min10, s10, a10, pos10,
+                                       min11, s11, a11, pos11)
+  
+  
+  }
+}
+
+#Convert all distance, acceleration, and speed variables to numeric
+names = c(3:5, 7:9, 11:13, 15:17, 19:21, 23:25, 27:29, 31:33, 35:37, 39:41, 43:45)
+
+model_set[,names] = lapply(model_set[,names],function(x) as.numeric(as.character(x)))
+
+```
+
+#Creating model set without player position
+```{r}
+#Create empty data frame to use for modeling
+model_set = data.frame(gameId = integer(), playId = integer(),
+                       def1_dist = integer(), def1_s = integer(),
+                       def1_a = integer(), def2_dist = integer(), 
+                       def2_s = integer(), def2_a = integer(), 
+                       def3_dist = integer(), def3_s = integer(),
+                       def3_a = integer(), def4_dist = integer(),
+                       def4_s = integer(), def4_a = integer(), 
+                       def5_dist = integer(), def5_s = integer(),
+                       def5_a = integer(), def6_dist = integer(),
+                       def6_s = integer(), def6_a = integer(),
+                       def7_dist = integer(), def7_s = integer(),
+                       def7_a = integer(), def8_dist = integer(), 
+                       def8_s = integer(), def8_a = integer(),
+                       def9_dist = integer(), def9_s = integer(),
+                       def9_a = integer(), def10_dist = integer(), 
+                       def10_s = integer(), def10_a = integer(), 
+                       def11_dist = integer(), def11_s = integer(),
+                       def11_a = integer()
+                       )
+
+# Loops through each unique game and creates a new dataset with each game
+for (games in unique(received2018$gameId)) {
+  x= received2018 %>% filter(gameId == games & kickingTeam == 1)
+  
+  #Loops through each unique play in the game and creates a new dataset for each play
+  for (plays in unique(x$playId)) {
+    y = x %>% filter(playId == plays)
+    
+    #Loops through 11 for each player on the kicking team
+    for (i in 1:11) {
+      #Finds the shortest distance from a defender to the returner saves the value
+      assign(paste0("min", i, sep = ""), min(y$distance, na.rm = TRUE))
+      
+      #Filters to the player with that shortest distance and creates values for their speed, acceleration, and position
+      z = y[which.min(y$distance),]
+      assign(paste0("s", i, sep = ""), z$s)
+      assign(paste0("a", i, sep = ""), z$a)
+  
+      #Removes that player from the temporary set and loops again
+      y = y[-which.min(y$distance),]
+    }
+    
+    #Prints out all of the values into one data frame
+    model_set[nrow(model_set)+1,] <- c(games, plays, min1, s1, a1,
+                                       min2, s2, a2, 
+                                       min3, s3, a3, 
+                                       min4, s4, a4, 
+                                       min5, s5, a5, 
+                                       min6, s6, a6, 
+                                       min7, s7, a7, 
+                                       min8, s8, a8, 
+                                       min9, s9, a9, 
+                                       min10, s10, a10, 
+                                       min11, s11, a11)
+  
+  
+  }
+}
+
+#Convert all distance, acceleration, and speed variables to numeric
+names = c(3:35)
+
+model_set[,names] = lapply(model_set[,names],function(x) as.numeric(as.character(x)))
+
+```
+
+
+
+
+#Merge the rest of the important variables
+```{r}
+#Selects the variables we want to include in model
+received2018_model_vars = received2018 %>% select("gameId", "playId",  "playDirection", "returnDirectionIntended", "returnDirectionActual", "quarter", "yardlineNumber", "preSnapHomeScore", "preSnapVisitorScore","kickLength", "kickReturnYardage", "receiveTeamHome")
+#, "playResult"
+
+#Sets game and play id to character variables
+received2018_model_vars$gameId = as.character(received2018_model_vars$gameId)
+received2018_model_vars$playId =as.character(received2018_model_vars$playId)
+
+#Joins the data sets and doesn't use any duplicated rows for one play
+final_set =  merge(model_set, received2018_model_vars[!duplicated(received2018_model_vars), ], by = c("gameId", "playId"))
+
+train = final_set %>% sample_frac(.7)
+
+```
+
+
+
+############################### Modeling #################################
+```{r}
+class(final_set$def1_dist)
+lm1 = lm(kickReturnYardage ~ . -gameId -playId, data = final_set)
+summary(lm1)
+#Found that the speed of the 6th closest defender is significant
+```
