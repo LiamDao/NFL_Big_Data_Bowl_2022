@@ -1,0 +1,111 @@
+---
+title: "BDB Modelling"
+author: "Trevor Hughes"
+date: "11/28/2021"
+output: html_document
+---
+
+```{r}
+library(dplyr)
+library(smbinning)
+library(corpcor)
+library(car)
+library(rpart)
+library(rpart.plot)
+library(ggplot2)
+library(xgboost)
+library(caret)
+library(Ckmeans.1d.dp)
+```
+
+
+#read in data
+```{r}
+train = read.csv("C:\\Users\\thughes\\Documents\\model train set.csv")
+
+```
+
+```{r}
+fit = rpart(kickReturnYardage ~ yardlineTotal , data = train, cp = .001, minbucket = 50)
+rpart.plot(fit)
+
+```
+
+```{r}
+for (i in 1:length(train)) {
+  if (length(unique(train[,i])) < 10) {
+    train[,i] = as.factor(train[,i])
+  }
+}
+  
+train = train %>% filter(is.na(train$kickReturnYardage) == 0)
+
+colnames(train[38])
+vif( lm(kickReturnYardage ~ . , data = train[,c(4:37, 39:46)]))
+# Distances for players 3 through 8 have vif's above 10
+#intended and actual return directions of course have high vif as well
+```
+
+#Getting variable importance from decision tree
+```{r}
+fit = rpart(kickReturnYardage ~ . , data = train[,c(4:37, 39:46)])
+rpart.plot(fit)
+
+varimp.data = data.frame(fit$variable.importance)
+varimp.data$names = as.character(rownames(varimp.data))
+varimp.data
+#ggplot(data = varimp.data, aes(x = names, y = fit.variable.importance)) + geom_bar(stat = "identity")
+```
+
+```{r}
+train_x = model.matrix(kickReturnYardage ~ ., data = train[,c(4:37, 39:46)])[,-1]
+train_y = train$kickReturnYardage
+
+set.seed(123)
+xgb.punt = xgboost(data = train_x, label = train_y, subsample = .5, nrounds = 100)
+
+set.seed(123)
+xgbcv.punt = xgb.cv(data = train_x, label = train_y, subsample = .5, nrounds = 100, nfold = 10)
+#Optimal nrounds is 5
+```
+
+```{r}
+tune_grid = expand.grid(
+  nrounds = 5,
+  eta = c(.1, .15, .2, .25, .3),
+  max_depth = c(1:10),
+  gamma = c(0),
+  colsample_bytree = 1,
+  min_child_weight = 1,
+  subsample = c(.25, .5, .75, 1)
+)
+
+set.seed(123)
+xgb.punt.caret = train(x = train_x, y = train_y, method = "xgbTree", tuneGrid = tune_grid, trControl = trainControl(method = 'cv', number = 10))
+
+plot(xgb.punt.caret)
+xgb.punt.caret$bestTune
+```
+
+```{r}
+set.seed(123)
+xgb.punt.final = xgboost(data = train_x, label = train_y, subsample = 1, nrounds = 5, eta = .3, max_depth = 3, prediction = T)
+
+xgb.importance(feature_names = colnames(train_x), model = xgb.punt.final)
+xgb.ggplot.importance(xgb.importance(feature_names = colnames(train_x), model = xgb.punt.final))
+
+
+```
+#Create different data sets depending on yard line
+```{r}
+train %>% filter(yardlineTotal <= 10)
+train %>% filter(10 < yardlineTotal & yardlineTotal <= 20)
+train %>% filter(20 < yardlineTotal & yardlineTotal <= 30)
+train %>% filter(30 < yardlineTotal & yardlineTotal <= 40)
+train %>% filter(40 < yardlineTotal & yardlineTotal <= 50)
+train %>% filter(50 < yardlineTotal )
+
+train %>% filter(yardlineTotal <= 22)
+train %>% filter(22 < yardlineTotal & yardlineTotal <= 44)
+```
+
