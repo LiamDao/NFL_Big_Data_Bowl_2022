@@ -9,7 +9,7 @@ output: html_document
 library(dplyr)
 library(stringr)
 library(sjmisc)
-library(stringr)
+library(stringr)dj
 
 ```
 
@@ -26,40 +26,41 @@ received2018 = returned2018 %>% filter(event == "punt_received")
 received2019 = returned2019 %>% filter(event == "punt_received")
 received2020 = returned2020 %>% filter(event == "punt_received")
 
+received = rbind(received2018, received2019, received2020)
 ```
 
 #Calculate each players distance from the returner
 ```{r}
 #Indicates which observations have multiple returners on one play
-received2018$multiple_returners = ifelse(str_detect((received2018$returnerId), ";"), 1, 0)
-sum(received2018$multiple_returners)
+received$multiple_returners = ifelse(str_detect((received$returnerId), ";"), 1, 0)
+sum(received$multiple_returners)
 
-received2018 = received2018 %>% filter(multiple_returners == 0)
+received = received %>% filter(multiple_returners == 0)
 
 #Indicates if a player is a returner or not
-received2018$returner = ifelse(received2018$returnerId == received2018$nflId, 1, 0)
+received$returner = ifelse(received$returnerId == received$nflId, 1, 0)
 
 #Creates separate dataset with the returners location and joins it with each row in the original data set where the game and play id match
-received2018returners = received2018 %>% filter(returner == 1) %>% select(gameId, playId,x, y) %>% rename(returner_x = x, returner_y = y)
+receivedReturners = received %>% filter(returner == 1) %>% select(gameId, playId,x, y) %>% rename(returner_x = x, returner_y = y)
 
-received2018 = left_join(received2018, received2018returners, by = c("gameId", "playId"))
+received = left_join(received, receivedReturners, by = c("gameId", "playId"))
 
 #Calculates the distance of each player from the returner
-received2018 = received2018 %>% mutate(distance = sqrt((returner_x - x)^2 +  (returner_y - y)^2))
+received = received %>% mutate(distance = sqrt((returner_x - x)^2 +  (returner_y - y)^2))
 ```
 
 #Determine if each player is on the kicking or receiving team
 ```{r}
-received2018$playerTeam = ifelse(received2018$team == "away", received2018$visitorTeamAbbr, received2018$homeTeamAbbr)
+received$playerTeam = ifelse(received$team == "away", received$visitorTeamAbbr, received$homeTeamAbbr)
 
-received2018$kickingTeam = ifelse(received2018$playerTeam == received2018$possessionTeam, 1, 0)
+received$kickingTeam = ifelse(received$playerTeam == received$possessionTeam, 1, 0)
 
 #Indicates if the receiving team is home or away
-received2018$receiveTeamHome = ifelse(received2018$possessionTeam != received2018$homeTeamAbbr, 1, 0)
+received$receiveTeamHome = ifelse(received$possessionTeam != received$homeTeamAbbr, 1, 0)
 
 ```
 
-
+Transforming data frame to be modelling friendly (Including player position)
 ```{r}
 #Create empty data frame to use for modeling
 model_set = data.frame(gameId = integer(), playId = integer(),
@@ -88,8 +89,8 @@ model_set = data.frame(gameId = integer(), playId = integer(),
                        )
 
 # Loops through each unique game and creates a new dataset with each game
-for (games in unique(received2018$gameId)) {
-  x= received2018 %>% filter(gameId == games & kickingTeam == 1)
+for (games in unique(received$gameId)) {
+  x= received %>% filter(gameId == games & kickingTeam == 1)
   
   #Loops through each unique play in the game and creates a new dataset for each play
   for (plays in unique(x$playId)) {
@@ -158,8 +159,8 @@ model_set = data.frame(gameId = integer(), playId = integer(),
                        )
 
 # Loops through each unique game and creates a new dataset with each game
-for (games in unique(received2018$gameId)) {
-  x= received2018 %>% filter(gameId == games & kickingTeam == 1)
+for (games in unique(received$gameId)) {
+  x= received %>% filter(gameId == games & kickingTeam == 1)
   
   #Loops through each unique play in the game and creates a new dataset for each play
   for (plays in unique(x$playId)) {
@@ -208,19 +209,24 @@ model_set[,names] = lapply(model_set[,names],function(x) as.numeric(as.character
 
 #Merge the rest of the important variables
 ```{r}
+received$yardlineTotal = ifelse(received$yardlineSide != received$possessionTeam, 100 - received$yardlineNumber, received$yardlineNumber)
+
 #Selects the variables we want to include in model
-received2018_model_vars = received2018 %>% select("gameId", "playId",  "playDirection", "returnDirectionIntended", "returnDirectionActual", "quarter", "yardlineNumber", "preSnapHomeScore", "preSnapVisitorScore","kickLength", "kickReturnYardage", "receiveTeamHome")
+received_model_vars = received %>% select("gameId", "playId",  "playDirection", "returnDirectionIntended", "returnDirectionActual", "quarter", "yardlineTotal", "preSnapHomeScore", "preSnapVisitorScore","kickLength", "kickReturnYardage", "receiveTeamHome")
 #, "playResult"
 
 #Sets game and play id to character variables
-received2018_model_vars$gameId = as.character(received2018_model_vars$gameId)
-received2018_model_vars$playId =as.character(received2018_model_vars$playId)
+received_model_vars$gameId = as.character(received_model_vars$gameId)
+received_model_vars$playId =as.character(received_model_vars$playId)
 
 #Joins the data sets and doesn't use any duplicated rows for one play
-final_set =  merge(model_set, received2018_model_vars[!duplicated(received2018_model_vars), ], by = c("gameId", "playId"))
+final_set =  merge(model_set, received_model_vars[!duplicated(received_model_vars), ], by = c("gameId", "playId"))
 
+set.seed(123)
 train = final_set %>% sample_frac(.7)
 
+write.csv(final_set, "C:\\Users\\thughes\\Documents\\model set.csv")
+write.csv(train, "C:\\Users\\thughes\\Documents\\model train set.csv")
 ```
 
 
