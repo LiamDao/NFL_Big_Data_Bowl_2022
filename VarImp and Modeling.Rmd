@@ -41,14 +41,15 @@ for (i in 1:length(train)) {
 train = train %>% filter(is.na(train$kickReturnYardage) == 0)
 
 colnames(train[38])
-vif( lm(kickReturnYardage ~ . , data = train[,c(4:37, 39:46)]))
+vif( lm(kickReturnYardage ~ . , data = train[,c(4:51, 55:60)]))
 # Distances for players 3 through 8 have vif's above 10
 #intended and actual return directions of course have high vif as well
+#return_x and yardlineTotal have high vifs
 ```
 
 #Getting variable importance from decision tree
 ```{r}
-fit = rpart(kickReturnYardage ~ . , data = train[,c(4:37, 39:46)])
+fit = rpart(kickReturnYardage ~ . , data = train[,c(4:51, 55:60)])
 rpart.plot(fit)
 
 varimp.data = data.frame(fit$variable.importance)
@@ -58,7 +59,7 @@ varimp.data
 ```
 
 ```{r}
-train_x = model.matrix(kickReturnYardage ~ ., data = train[,c(4:37, 39:46)])[,-1]
+train_x = model.matrix(kickReturnYardage ~ ., data = train[,c(4:51, 55:60)])[,-1]
 train_y = train$kickReturnYardage
 
 set.seed(123)
@@ -89,23 +90,162 @@ xgb.punt.caret$bestTune
 
 ```{r}
 set.seed(123)
-xgb.punt.final = xgboost(data = train_x, label = train_y, subsample = 1, nrounds = 5, eta = .3, max_depth = 3, prediction = T)
+xgb.punt.final = xgboost(data = train_x, label = train_y, subsample = .75, nrounds = 5, eta = .3, max_depth = 2, prediction = T)
 
 xgb.importance(feature_names = colnames(train_x), model = xgb.punt.final)
 xgb.ggplot.importance(xgb.importance(feature_names = colnames(train_x), model = xgb.punt.final))
 
 
 ```
-#Create different data sets depending on yard line
-```{r}
-train %>% filter(yardlineTotal <= 10)
-train %>% filter(10 < yardlineTotal & yardlineTotal <= 20)
-train %>% filter(20 < yardlineTotal & yardlineTotal <= 30)
-train %>% filter(30 < yardlineTotal & yardlineTotal <= 40)
-train %>% filter(40 < yardlineTotal & yardlineTotal <= 50)
-train %>% filter(50 < yardlineTotal )
 
-train %>% filter(yardlineTotal <= 22)
-train %>% filter(22 < yardlineTotal & yardlineTotal <= 44)
+
+
+#Create different data sets depending on zone groups
+```{r}
+train.a1 = train %>% filter(return_zone %in% c(1,2,3))
+train.a2 = train %>% filter(return_zone %in% c(4,5,6))
+train.a3 = train %>% filter(return_zone %in% c(7,8,9))
 ```
+
+
+```{r}
+train_x = model.matrix(kickReturnYardage ~ ., data = train.a1[,c(4:51, 55:60)])[,-1]
+train_y = train.a1$kickReturnYardage
+
+set.seed(123)
+xgb.punt = xgboost(data = train_x, label = train_y, subsample = .5, nrounds = 100)
+
+set.seed(123)
+xgbcv.punt = xgb.cv(data = train_x, label = train_y, subsample = .5, nrounds = 100, nfold = 10)
+#Optimal nrounds is 4
+```
+
+```{r}
+tune_grid = expand.grid(
+  nrounds = 4,
+  eta = c(.1, .15, .2, .25, .3),
+  max_depth = c(1:10),
+  gamma = c(0),
+  colsample_bytree = 1,
+  min_child_weight = 1,
+  subsample = c(.25, .5, .75, 1)
+)
+
+set.seed(123)
+xgb.punt.caret = train(x = train_x, y = train_y, method = "xgbTree", tuneGrid = tune_grid, trControl = trainControl(method = 'cv', number = 10))
+
+plot(xgb.punt.caret)
+xgb.punt.caret$bestTune
+```
+
+```{r}
+set.seed(123)
+xgb.punt.final = xgboost(data = train_x, label = train_y, subsample = .25, nrounds = 4, eta = .3, max_depth = 2, prediction = T)
+
+xgb.importance(feature_names = colnames(train_x), model = xgb.punt.final)
+xgb.ggplot.importance(xgb.importance(feature_names = colnames(train_x), model = xgb.punt.final))
+
+
+```
+
+
+
+```{r}
+train_x = model.matrix(kickReturnYardage ~ ., data = train.a3[,c(4:51, 55:60)])[,-1]
+train_y = train.a3$kickReturnYardage
+
+set.seed(123)
+xgb.punt = xgboost(data = train_x, label = train_y, subsample = .5, nrounds = 100)
+
+set.seed(123)
+xgbcv.punt = xgb.cv(data = train_x, label = train_y, subsample = .5, nrounds = 100, nfold = 10)
+#Optimal nrounds is 6
+```
+
+```{r}
+tune_grid = expand.grid(
+  nrounds = 6,
+  eta = c(.1, .15, .2, .25, .3),
+  max_depth = c(1:10),
+  gamma = c(0),
+  colsample_bytree = 1,
+  min_child_weight = 1,
+  subsample = c(.25, .5, .75, 1)
+)
+
+set.seed(123)
+xgb.punt.caret = train(x = train_x, y = train_y, method = "xgbTree", tuneGrid = tune_grid, trControl = trainControl(method = 'cv', number = 10))
+
+plot(xgb.punt.caret)
+xgb.punt.caret$bestTune
+```
+
+```{r}
+set.seed(123)
+xgb.punt.final = xgboost(data = train_x, label = train_y, subsample = 1, nrounds = 6, eta = .3, max_depth = 1, prediction = T)
+
+xgb.importance(feature_names = colnames(train_x), model = xgb.punt.final)
+xgb.ggplot.importance(xgb.importance(feature_names = colnames(train_x), model = xgb.punt.final))
+
+
+```
+
+
+
+############################## XGBoost by Zone ###########################
+#Create different data sets depending on zone
+```{r}
+train.z1 = train %>% filter(return_zone == 1)
+train.z2 = train %>% filter(return_zone == 2)
+train.z3 = train %>% filter(return_zone == 3)
+train.z4 = train %>% filter(return_zone == 4)
+train.z5 = train %>% filter(return_zone == 5)
+train.z6 = train %>% filter(return_zone == 6)
+train.z7 = train %>% filter(return_zone == 7)
+train.z8 = train %>% filter(return_zone == 8)
+train.z9 = train %>% filter(return_zone == 9)
+
+```
+
+
+```{r}
+train_x = model.matrix(kickReturnYardage ~ ., data = train.z1[,c(4:51, 55:60)])[,-1]
+train_y = train.z1$kickReturnYardage
+
+set.seed(123)
+xgb.punt = xgboost(data = train_x, label = train_y, subsample = .5, nrounds = 100)
+
+set.seed(123)
+xgbcv.punt = xgb.cv(data = train_x, label = train_y, subsample = .5, nrounds = 100, nfold = 10)
+#Optimal nrounds is 4
+```
+
+```{r}
+tune_grid = expand.grid(
+  nrounds = 4,
+  eta = c(.1, .15, .2, .25, .3),
+  max_depth = c(1:10),
+  gamma = c(0),
+  colsample_bytree = 1,
+  min_child_weight = 1,
+  subsample = c(.25, .5, .75, 1)
+)
+
+set.seed(123)
+xgb.punt.caret = train(x = train_x, y = train_y, method = "xgbTree", tuneGrid = tune_grid, trControl = trainControl(method = 'cv', number = 10))
+
+plot(xgb.punt.caret)
+xgb.punt.caret$bestTune
+```
+
+```{r}
+set.seed(123)
+xgb.punt.final = xgboost(data = train_x, label = train_y, subsample = .5, nrounds = 4, eta = .3, max_depth = 5, prediction = T)
+
+xgb.importance(feature_names = colnames(train_x), model = xgb.punt.final)
+xgb.ggplot.importance(xgb.importance(feature_names = colnames(train_x), model = xgb.punt.final))
+
+
+```
+
 
