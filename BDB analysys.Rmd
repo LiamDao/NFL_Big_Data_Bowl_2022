@@ -9,7 +9,7 @@ output: html_document
 library(dplyr)
 library(stringr)
 library(sjmisc)
-library(stringr)dj
+library(stringr)
 
 ```
 
@@ -83,6 +83,9 @@ xSplit = 120/5
 ySplit = 53.3/3
 #Builds a zone grid for player location
 received$zone = ifelse(received$absX <= xSplit, ifelse(received$absY <= ySplit, 1, ifelse(received$absY <= 2*ySplit, 2, 3)),  ifelse(received$absX <= 2*xSplit, ifelse(received$absY <= ySplit, 4, ifelse(received$absY <= 2*ySplit, 5, 6)),  ifelse(received$absX <= 3*xSplit, ifelse(received$absY <= ySplit, 7, ifelse(received$absY <= 2*ySplit, 8, 9)), ifelse(received$absX <= 4*xSplit, ifelse(received$absY <= ySplit, 10, ifelse(received$absY <= 2*ySplit, 11, 12)), ifelse(received$absY <= ySplit, 13, ifelse(received$absY <= 2*ySplit, 14, 15))))))
+
+#Creates a variable that indicates which side of the field a defender is on from the defenders perspective
+received$side = ifelse(received$zone %in% c(1,4,7,10,13), "L", ifelse(received$zone %in% c(2,5,8,11,14), "C", "R"))
 ```
 
 Transforming data frame to be modelling friendly (Including player position)
@@ -168,22 +171,33 @@ model_set[,names] = lapply(model_set[,names],function(x) as.numeric(as.character
 #Create empty data frame to use for modeling
 model_set_def = data.frame(gameId = integer(), playId = integer(),
                        def1_dist = integer(), def1_s = integer(),
-                       def1_a = integer(), def1_zone = integer(),def2_dist = integer(), 
-                       def2_s = integer(), def2_a = integer(), def2_zone = integer(),
+                       def1_a = integer(), def2_dist = integer(), 
+                       def2_s = integer(), def2_a = integer(), 
                        def3_dist = integer(), def3_s = integer(),
-                       def3_a = integer(), def3_zone = integer(), def4_dist = integer(),
-                       def4_s = integer(), def4_a = integer(), def4_zone = integer(),
+                       def3_a = integer(),  def4_dist = integer(),
+                       def4_s = integer(), def4_a = integer(), 
                        def5_dist = integer(), def5_s = integer(),
-                       def5_a = integer(), def5_zone = integer(),  def6_dist = integer(),
-                       def6_s = integer(), def6_a = integer(), def6_zone = integer(),
+                       def5_a = integer(), def6_dist = integer(),
+                       def6_s = integer(), def6_a = integer(), 
                        def7_dist = integer(), def7_s = integer(),
-                       def7_a = integer(), def7_zone = integer(),  def8_dist = integer(), 
-                       def8_s = integer(), def8_a = integer(), def8_zone = integer(),
+                       def7_a = integer(),  def8_dist = integer(), 
+                       def8_s = integer(), def8_a = integer(), 
                        def9_dist = integer(), def9_s = integer(),
-                       def9_a = integer(), def9_zone = integer(), def10_dist = integer(), 
-                       def10_s = integer(), def10_a = integer(), def10_zone = integer(),
+                       def9_a = integer(), def10_dist = integer(), 
+                       def10_s = integer(), def10_a = integer(), 
                        def11_dist = integer(), def11_s = integer(),
-                       def11_a = integer(), def11_zone = integer()
+                       def11_a = integer(),def1_zone = integer(), def2_zone = integer(),
+                       def3_zone = integer(), def4_zone = integer(), 
+                       def5_zone = integer(), def6_zone = integer(), 
+                       def7_zone = integer(), def8_zone = integer(),
+                       def9_zone = integer(), def10_zone = integer(),
+                       def11_zone = integer(), def1_side = character(), 
+                       def2_side = character(), def3_side = character(), 
+                       def4_side = character(), def5_side = character(), 
+                       def6_side = character(), def7_side = character(), 
+                       def8_side = character(), def9_side = character(),
+                       def10_side = character(), def11_side = character()
+                       
                        )
 
 # Loops through each unique game and creates a new dataset with each game
@@ -204,30 +218,35 @@ for (games in unique(received$gameId)) {
       assign(paste0("s", i, sep = ""), z$s)
       assign(paste0("a", i, sep = ""), z$a)
       assign(paste0("zone", i, sep = ""), z$zone)
+      assign(paste0("side", i, sep = ""), z$side)
   
       #Removes that player from the temporary set and loops again
       y = y[-which.min(y$distance),]
     }
     
     #Prints out all of the values into one data frame
-    model_set_def[nrow(model_set_def)+1,] <- c(games, plays, min1, s1, a1, zone1,
-                                       min2, s2, a2, zone2,
-                                       min3, s3, a3, zone3,
-                                       min4, s4, a4, zone4,
-                                       min5, s5, a5, zone5,
-                                       min6, s6, a6, zone6,
-                                       min7, s7, a7, zone7,
-                                       min8, s8, a8, zone8,
-                                       min9, s9, a9, zone9,
-                                       min10, s10, a10, zone10,
-                                       min11, s11, a11, zone11)
+    model_set_def[nrow(model_set_def)+1,] <- c(games, plays, min1, s1, a1, 
+                                       min2, s2, a2,
+                                       min3, s3, a3,
+                                       min4, s4, a4,
+                                       min5, s5, a5,
+                                       min6, s6, a6,
+                                       min7, s7, a7,
+                                       min8, s8, a8,
+                                       min9, s9, a9, 
+                                       min10, s10, a10,
+                                       min11, s11, a11,
+                                       zone1, zone2, zone3, zone4, zone5, zone6,
+                                       zone7, zone8, zone9, zone10, zone11, 
+                                       side1, side2, side3, side4, side5, side6, 
+                                       side7, side8, side9, side10, side11)
   
   
   }
 }
 
 #Convert all distance, acceleration, and speed variables to numeric
-names = c(3:5, 7:9, 11:13, 15:17, 19:21, 23:25, 27:29, 31:33, 35:37, 39:41, 43:45)
+names = c(3:35)
 
 model_set_def[,names] = lapply(model_set_def[,names],function(x) as.numeric(as.character(x)))
 
@@ -289,11 +308,19 @@ received_model_vars$playId =as.character(received_model_vars$playId)
 all_players =  merge( model_set_off, model_set_def, by = c("gameId", "playId"))
 final_set =  merge( all_players, received_model_vars[!duplicated(received_model_vars), ], by = c("gameId", "playId"))
 
+
 set.seed(123)
 train = final_set %>% sample_frac(.7)
+non_train = anti_join(final_set, train, by = c('gameId', 'playId'))
+set.seed(123)
+val = non_train %>% sample_frac(.2)
+test = anti_join(non_train, val, by = c('gameId', 'playId'))
 
 write.csv(final_set, "C:\\Users\\thughes\\Documents\\model set.csv")
 write.csv(train, "C:\\Users\\thughes\\Documents\\model train set.csv")
+write.csv(val, "C:\\Users\\thughes\\Documents\\model val set.csv")
+write.csv(test, "C:\\Users\\thughes\\Documents\\model test set.csv")
+
 ```
 
 
