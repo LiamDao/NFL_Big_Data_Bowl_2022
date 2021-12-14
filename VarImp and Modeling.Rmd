@@ -21,8 +21,10 @@ library(Ckmeans.1d.dp)
 
 #read in data
 ```{r}
+model_set = read.csv("C:\\Users\\thughes\\Documents\\model set.csv")
 train = read.csv("C:\\Users\\thughes\\Documents\\model train set.csv")
 val = read.csv("C:\\Users\\thughes\\Documents\\model val set.csv")
+full_set = read.csv("C:\\Users\\thughes\\Documents\\full set.csv")
 ```
 
 ```{r}
@@ -50,13 +52,13 @@ for (i in 1:length(val)) {
   
 val = val %>% filter(is.na(val$kickReturnYardage) == 0)
 
-for (i in 1:length(val)) {
-  if (length(unique(val[,i])) < 16) {
-    val[,i] = as.factor(val[,i])
+for (i in 1:length(full_set)) {
+  if (length(unique(full_set[,i])) < 16) {
+    full_set[,i] = as.factor(full_set[,i])
   }
 }
   
-val = val %>% filter(is.na(val$kickReturnYardage) == 0)
+full_set = full_set %>% filter(is.na(full_set$kickReturnYardage) == 0)
 
 
 #colnames(train[38])
@@ -369,14 +371,18 @@ for (j in 1) {
 zone_xgbs = list(xgb.punt.z1, xgb.punt.z2, xgb.punt.z3, xgb.punt.z4, xgb.punt.z5, xgb.punt.z6, xgb.punt.z7, xgb.punt.z8, xgb.punt.z9)
 
 for (i in 1:9){
-  val.z = train %>% filter(return_zone == i)
+  val.z = val %>% filter(return_zone == i)
+  if (nrow(val.z) > 0) {
+    val_x = model.matrix(kickReturnYardage ~ ., data = val.z[,c(4:6, 8:40,52:64,68:71 ) ])[,-1]
+    val_y = val.z$kickReturnYardage
   
-  val_x = model.matrix(kickReturnYardage ~ ., data = val.z[,c(4:6, 8:40,52:64,68:71 )])[,-1]
-  val_y = val.z$kickReturnYardage
+    val.z$xgb_zone_pred = predict(zone_xgbs[i], type = "response", val_x)[[1]]
   
-  val.z$xgb_zone_pred = predict(zone_xgbs[i], type = "response", val_x)[[1]]
-  
-  assign(paste0("val.mae.z", i), MAE(val.z$xgb_zone_pred, val.z$kickReturnYardage))
+    assign(paste0("val.mae.z", i), MAE(val.z$xgb_zone_pred, val.z$kickReturnYardage))
+  }
+  else{
+    assign(paste0("val.mae.z", i), 0)
+  }
 }
 
 
@@ -384,6 +390,81 @@ for (i in 1:9){
   val.mae.z4*nrow(val.z4) + val.mae.z5*nrow(val.z5) + val.mae.z6*nrow(val.z6) +
   val.mae.z7*nrow(val.z7) + val.mae.z8*nrow(val.z8) + val.mae.z9*nrow(val.z9))/nrow(val)
 
-#Weighted Val MAE of 4.772 for c(4:6, 8:40,52:64,68:71 )
+#Weighted Val MAE of 5.516 for c(4:6, 8:40,52:64,68:71 )
+#Weighted Val MAE of 5.687 for c(4:6, 8:40,63:65, 68:71 ) 
+summary(shared$avg_epa)
+```
+
+
+
+
+
+#################### Applying model to determine best returner/teams ###################
+#Based on Areas
+```{r}
+full.a1 = full_set %>% filter(return_zone %in% c(1,2,3))
+full.a2 = full_set %>% filter(return_zone %in% c(4,5,6))
+full.a3 = full_set %>% filter(return_zone %in% c(7,8,9))
+
+area_xgbs = list(xgb.punt.a1, xgb.punt.a2, xgb.punt.a3)
+
+full_with_preds = data.frame()
+for (i in 1:3){
+  zones = ifelse(i == 1, list(1:3), ifelse(i == 2, list(4:6), list(7:9)))
+  full.a = full_set %>% filter(return_zone %in% zones[[1]])
+  
+  full_x = model.matrix(kickReturnYardage ~ ., data = full.a[,c(4:6, 8:40,63:68, 70, 71 )])[,-1]
+  full_y = full.a$kickReturnYardage
+  
+  full.a$xgb_area_pred = predict(area_xgbs[i], type = "response", full_x)[[1]]
+  full_with_preds = rbind(full.a, full_with_preds)
+
+}
 
 ```
+
+```{r}
+full_with_preds$yard_dif = full_with_preds$kickReturnYardage - full_with_preds$xgb_area_pred
+
+full_with_preds %>% group_by(returnerId) %>% summarise(yards_over_expected = mean(yard_dif)) %>% arrange(desc(yards_over_expected))
+
+
+```
+
+#Based on Zones
+```{r}
+full.z1 = full_set %>% filter(return_zone == 1)
+full.z2 = full_set %>% filter(return_zone == 2)
+full.z3 = full_set %>% filter(return_zone == 3)
+full.z4 = full_set %>% filter(return_zone == 4)
+full.z5 = full_set %>% filter(return_zone == 5)
+full.z6 = full_set %>% filter(return_zone == 6)
+full.z7 = full_set %>% filter(return_zone == 7)
+full.z8 = full_set %>% filter(return_zone == 8)
+full.z9 = full_set %>% filter(return_zone == 9)
+
+zone_xgbs = list(xgb.punt.z1, xgb.punt.z2, xgb.punt.z3, xgb.punt.z4, xgb.punt.z5, xgb.punt.z6, xgb.punt.z7, xgb.punt.z8, xgb.punt.z9)
+
+full_with_preds = data.frame()
+for (i in 1:9){
+  
+  full.z = full_set %>% filter(return_zone == i)
+  
+  full_x = model.matrix(kickReturnYardage ~ ., data = full.z[,c(4:6, 8:40,52:64,68:71 )])[,-1]
+  full_y = full.z$kickReturnYardage
+  
+  full.z$xgb_zone_pred = predict(zone_xgbs[i], type = "response", full_x)[[1]]
+  full_with_preds = rbind(full.z, full_with_preds)
+
+}
+
+```
+
+```{r}
+full_with_preds$yard_dif = full_with_preds$kickReturnYardage - full_with_preds$xgb_zone_pred
+
+full_with_preds %>% group_by(returnerId) %>% summarise(yards_over_expected = mean(yard_dif)) %>% arrange(desc(yards_over_expected))
+
+
+```
+
