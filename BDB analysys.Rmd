@@ -290,6 +290,23 @@ table(model_set_off$return_zone)
 
 ```
 
+```{r}
+epa2018 = read.csv("C:\\Users\\thughes\\Documents\\epa2018.csv")
+epa2019 = read.csv("C:\\Users\\thughes\\Documents\\epa2019.csv")
+epa2020 = read.csv("C:\\Users\\thughes\\Documents\\epa2020.csv")
+epa = rbind(epa2018, epa2019, epa2020)
+epa$gameId = epa$old_game_id
+epa$playId = epa$play_id
+
+epa$wind = ifelse(is.na(epa$wind), 0, epa$wind)
+epa$temp = ifelse(is.na(epa$temp), 70, epa$temp)
+
+epa_model_vars = epa%>% select("gameId", "playId", "series", "surface",  "temp", "wind")
+
+
+epa_full_vars = epa %>% select("gameId", "playId", "weather", "ep", "epa", "punt_returner_player_name", "punter_player_name", "series", "surface", "roof", "temp", "wind", "home_coach", "away_coach")
+
+```
 
 
 #Merge the rest of the important variables
@@ -307,7 +324,7 @@ received_model_vars$playId =as.character(received_model_vars$playId)
 #Joins the data sets and doesn't use any duplicated rows for one play
 all_players =  merge( model_set_off, model_set_def, by = c("gameId", "playId"))
 final_set =  merge( all_players, received_model_vars[!duplicated(received_model_vars), ], by = c("gameId", "playId"))
-
+final_set =  merge( final_set, epa_model_vars[!duplicated(epa_model_vars), ], by = c("gameId", "playId"))
 
 set.seed(123)
 train = final_set %>% sample_frac(.7)
@@ -323,6 +340,24 @@ write.csv(test, "C:\\Users\\thughes\\Documents\\model test set.csv")
 
 ```
 
+#Create data set with all variables
+```{r}
+
+
+received_full_vars = received %>% select("gameId", "playId",  "playDirection", "returnDirectionIntended", "returnDirectionActual", "quarter", "yardlineTotal", "receiveTeamScoreDif","kickLength", "kickReturnYardage", "receiveTeamHome", "missedTackler", "tackler", "assistTackler", "vises", "season", "week", "kickContactType", "gameDate", "gameTimeEastern", "homeTeamAbbr", "visitorTeamAbbr", "playDescription", "yardsToGo", "possessionTeam", "kickerId", "returnerId", "gameClock", "penaltyCodes", "penaltyJerseyNumbers", "penaltyYards", "playResult")
+
+received_full_vars$gameId = as.character(received_full_vars$gameId)
+received_full_vars$playId =as.character(received_full_vars$playId)
+
+#Joins the data sets and doesn't use any duplicated rows for one play
+
+full_set =  merge( all_players, received_full_vars[!duplicated(received_full_vars), ], by = c("gameId", "playId"))
+
+full_set =  merge( full_set, epa_full_vars[!duplicated(epa_full_vars), ], by = c("gameId", "playId"))
+
+write.csv(full_set, "C:\\Users\\thughes\\Documents\\full set.csv")
+```
+
 
 
 ############################### Modeling #################################
@@ -332,3 +367,10 @@ lm1 = lm(kickReturnYardage ~ . -gameId -playId, data = final_set)
 summary(lm1)
 #Found that the speed of the 6th closest defender is significant
 ```
+
+
+```{r}
+received %>% filter(returnerId %in% c(43304, 46087, 46173	) & returner == 1)
+
+```
+
