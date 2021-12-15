@@ -25,12 +25,15 @@ model_set = read.csv("C:\\Users\\thughes\\Documents\\model set.csv")
 train = read.csv("C:\\Users\\thughes\\Documents\\model train set.csv")
 val = read.csv("C:\\Users\\thughes\\Documents\\model val set.csv")
 full_set = read.csv("C:\\Users\\thughes\\Documents\\full set.csv")
+
+
 ```
 
 ```{r}
 #Create decision tree of yardlineTotal to see where significant splits are
-fit = rpart(kickReturnYardage ~ yardlineTotal , data = train, cp = .001, minbucket = 50)
+fit = rpart(kickReturnYardage ~ return_x , data = train, cp = .0025, minbucket = 50)
 rpart.plot(fit)
+
 
 ```
 
@@ -82,7 +85,7 @@ varimp.data
 
 ```{r}
 #Not including zones, return direction actual, quarter
-train_x = model.matrix(kickReturnYardage ~ ., data = train[,c(4:6, 8:40,52:64,68:71 )])[,-1]
+train_x = model.matrix(kickReturnYardage ~ ., data = train[,c(4:6, 8:51,63:71 )])[,-1]
 train_y = train$kickReturnYardage
 
 set.seed(123)
@@ -123,6 +126,122 @@ xgb.ggplot.importance(xgb.importance(feature_names = colnames(train_x), model = 
 #MAE of 5.9 without
 ```
 
+
+```{r}
+train.h1 = train %>% filter(return_x < 28)
+train.h2 = train %>% filter(return_x >= 28)
+
+levels(val$return_zone) = c(levels(val$return_zone), "9")
+val.h1 = val %>% filter(return_x < 28)
+val.h2 = val %>% filter(return_x >= 28)
+
+```
+
+
+```{r}
+varlist = list(c(4:6, 8:40,63, 65,67:71 ),c(4:6, 8:40,63, 64,67:71 ),
+               c(4:6, 8:40,52:71 ), c(4:6, 8:40,52:65, 67:71 ), c(4:6, 8:40,63:71 ),
+               c(4:40,63:71 ), c(4:6, 8:40,63,64,66:71 ), c(5:6, 8:40,63:71 ), 
+               c(4:6, 8:40,63:67, 69:71 ), c(4:6, 8:40,63:68, 70, 71 ), 
+               c(4:6, 8:40,63:66, 68:71 ), c(4:6, 8:40,63,64,68:71 ))
+
+varlist2=  list(c(4:6, 8:40,63:71),  c(4,6, 8:40,63:71,74), c(4:5, 8:40,63:71,74), c(4:6, 8:40,63:67, 69:71,74), c(4:6, 8:40,64:71,74), c(4:6, 8:40,63:70,74), c(4:6, 8:40,63:65, 67:71,74))
+
+
+num = 0
+#for (vars in varlist2){
+#Placeholder loop if not looping through different groups of variables
+for (j in 1) {
+  num = num + 1
+  for (i in 1:2){
+    print(paste("Half ", i))
+    
+    if (i == 1) {
+      train.h = train %>% filter(return_x < 28)
+    }
+    else {
+      train.h = train %>% filter(return_x >= 28)
+    }
+    #No sides or zones of defenders included
+    train_x = model.matrix(kickReturnYardage ~ ., data = train.h[,c(4:40,63:68,70,71 )])[,-1]
+    train_y = train.h$kickReturnYardage
+  
+    tune_grid = expand.grid(
+    nrounds = 4,
+    eta = c(.1, .15, .2, .25, .3),
+    max_depth = c(1:10),
+    gamma = c(0),
+    colsample_bytree = 1,
+    min_child_weight = 1,
+    subsample = c(.25, .5, .75, 1)
+    )
+
+    set.seed(123)
+    xgb.punt.caret = train(x = train_x, y = train_y, method = "xgbTree", tuneGrid = tune_grid, trControl = trainControl(method = 'cv', number = 10), metric = 'MAE')
+
+    set.seed(123)
+    assign(paste0("xgb.punt.h", i), xgboost(data = train_x, label = train_y, 
+                           subsample = xgb.punt.caret$bestTune$subsample, nrounds = 4, 
+                           eta = xgb.punt.caret$bestTune$eta,
+                           max_depth = xgb.punt.caret$bestTune$max_depth, 
+                           prediction = T, eval_metric = 'mae'))
+
+    set.seed(123)
+    xgb.punt.h = xgboost(data = train_x, label = train_y, 
+                           subsample = xgb.punt.caret$bestTune$subsample, nrounds = 4, 
+                           eta = xgb.punt.caret$bestTune$eta,
+                           max_depth = xgb.punt.caret$bestTune$max_depth, 
+                           prediction = T, eval_metric = 'mae')
+
+
+    #x = xgb.importance(feature_names = colnames(train_x), model = xgb.punt.final)
+    #print(x)
+    
+    g = xgb.ggplot.importance(xgb.importance(feature_names = colnames(train_x), model = xgb.punt.h)) + ggtitle(paste("Feature Importance Half", i))
+    print(g)
+  }
+
+  averaged_mae = (min(xgb.punt.h1$evaluation_log$train_mae)*nrow(train.h1) +
+      min(xgb.punt.h2$evaluation_log$train_mae)*nrow(train.h2))/nrow(train)
+  
+  print(num)
+  print(vars)
+  print(averaged_mae)
+}
+
+#Average MAE of 4.519 - c(4:6, 8:40,63:71 )
+#Average MAE of 4.518 - c(4:40,63:68,70,71 )
+
+```
+
+#Run halves xgboost on validation
+```{r}
+half_xgbs = list(xgb.punt.h1, xgb.punt.h2)
+
+for (i in 1:2){
+  if (i == 1) {
+      val.h = val %>% filter(return_x < 28)
+    }
+    else {
+      val.h = val %>% filter(return_x >= 28)
+    }
+  
+  val_x = model.matrix(kickReturnYardage ~ ., data = val.h[,c(4:40,63:68,70,71 )])[,-1]
+  val_y = val.h$kickReturnYardage
+  
+  val.h$xgb_half_pred = predict(half_xgbs[i], type = "response", val_x)[[1]]
+  
+  assign(paste0("val.mae.h", i), MAE(val.h$xgb_half_pred, val.h$kickReturnYardage))
+}
+
+half_xgbs[[1]]$feature_names
+val_x
+(val.mae.h1*nrow(val.h1) + val.mae.h2*nrow(val.h2))/nrow(val)
+
+#Weighted Val MAE of 5.190 for c(4:6, 8:40,63:71 )
+#Weighted Val MAE of 5.187 for c(4:40,63:68,70,71 )
+
+```
 
 
 #Create different data sets depending on zone groups
@@ -228,7 +347,7 @@ for (i in 1:3){
 #Weighted MAE of 5.180 best for variables: c(4:6, 8:40,63, 65,67:71 )
 ### If we can't include actual return direction
 #Weighted MAE of 5.367 best for variables: c(4:6, 8:40,63,64,68:71 )
-
+train %>% filter(return_x < 32)
 ```
 
 #Run area xgboost on validation
@@ -467,4 +586,7 @@ full_with_preds %>% group_by(returnerId) %>% summarise(yards_over_expected = mea
 
 
 ```
+
+#Use area zones and still cut down on amount of variables used
+#Ideally you want at least 10 observations per feature
 
