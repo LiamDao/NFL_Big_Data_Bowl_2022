@@ -37,6 +37,7 @@ library(rpart)
 library(rpart.plot)
 library(nnet)
 library(NeuralNetTools)
+library(Metrics)
 
 #turning off warnings
 options(warn=-1)
@@ -257,7 +258,7 @@ tune_grid <- expand.grid(
 )
 
 
-set.seed(12345)
+set.seed(123)
 nn.yards.caret <- train(kickReturnYardage ~ . -X -gameId -playId,
                         data = train5, 
                         method = "nnet", 
@@ -274,10 +275,10 @@ tune.results[which.min(tune.results$RMSE),]
 tune.results[which.min(tune.results$MAE),]
 ```
 > Current Iteration:
-Decay: .78, 1
-size: 2, 2
-RMSE: 5.32, 5.35
-MAE: 3.99, 3.989 
+Decay: .92
+size: 2
+RMSE: 5.38
+MAE: 4.03
 
 ## Flag for kickReturnYardage Outliers (55 outliers)
 ```{r flag for kickReturnYardage Outliers}
@@ -291,7 +292,7 @@ tune_grid <- expand.grid(
 )
 
 
-set.seed(12345)
+set.seed(123)
 nn.yards.caret <- train(kickReturnYardage ~ . -X -gameId -playId,
                         data = train6, 
                         method = "nnet", 
@@ -307,7 +308,95 @@ tune.results <- as.data.frame(nn.yards.caret$results)
 tune.results[which.min(tune.results$MAE),]
 ```
 > Current Iteration:
-Decay: .95
-size: 7
-RMSE: 6.93
-MAE: 4.83
+Decay: .945
+size: 6
+RMSE: 7.25
+MAE: 4.97
+
+## All Variables and Outlier Flag
+```{r}
+################# Now try with using all variabels (not the var.sel) ########################
+outliersall <- boxplot(train$kickReturnYardage, plot=FALSE)$out
+train['outlier_flag'] <- ifelse(train$kickReturnYardage %in% outliersall, "1", "0")
+
+# Model Tuning
+tune_grid <- expand.grid(
+  .size = c(1, 2, 3, 4, 5),
+  .decay = seq(.65, .75, by = .01)
+)
+
+
+set.seed(123)
+nn.yards.caret <- train(kickReturnYardage ~ . -X -gameId -playId,
+                        data = train, 
+                        method = "nnet", 
+                        #metric = "RMSE",
+                        tuneGrid = tune_grid,
+                        trControl = trainControl(method = 'cv', number = 10),
+                        trace = FALSE, 
+                        linout = TRUE,
+                        MaxNWts = 3000)
+tune.results <- as.data.frame(nn.yards.caret$results)
+
+# Get parameters for best MAE
+tune.results[which.min(tune.results$MAE),]
+```
+> Current Iteration:
+Decay: .75
+size: 3
+RMSE: 9.28
+MAE: 6.14
+
+## Edit Validation Data
+```{r validation data edits}
+# Remove def zone variables
+val <- val %>% 
+  select(-41:-51)
+
+# Any variables with less than 10 values are labeled at categorical (16 because I wanted zone variables to be a factor)
+for (i in 1:length(val)) {
+  if (length(unique(val[,i])) < 16) {
+    val[,i] = as.factor(val[,i])
+  }
+}
+
+# Filter out NA observations
+val <-  val %>% 
+  filter(is.na(val$kickReturnYardage) == 0)
+
+# Scale standardize 
+for (i in 4:length(val)) {
+  if (class(val[,i]) == c('numeric', 'integer')) {
+    val[,i] = scale(val[,i])
+  }
+}
+
+val$kickReturnYardage <- as.numeric(val$kickReturnYardage)
+
+# Subset variables and flag outliers
+val2 <- val %>% 
+  select(var.sel, X, kickReturnYardage, gameId, playId)
+
+outliersval <- boxplot(val2$kickReturnYardage, plot=FALSE)$out
+val2['outlier_flag'] <- ifelse(val2$kickReturnYardage %in% outliersval, "1", "0")
+
+val2$outlier_flag <- as.factor(val2$outlier_flag)
+  
+```
+
+
+## Use Models on Validation
+```{r validation}
+# Model with subsetted variables and outlier flag
+set.seed(123)
+final.subset.model <- nnet(kickReturnYardage ~ . -gameId -playId, data = train6, size = 6, decay = .945, linout = TRUE )
+
+final.subset.predict <- predict(final.subset.model, newdata = val2)
+
+# Calculate RMSE and MAE
+final.subset.rmse <- sqrt(mean((final.subset.predict - val2$kickReturnYardage)^2)) # RMSE
+final.subset.mae <- mae(val2$kickReturnYardage, final.subset.predict) # MAE
+```
+> Performance Metrics:
+RMSE: 7.93
+MAE: 5.93
