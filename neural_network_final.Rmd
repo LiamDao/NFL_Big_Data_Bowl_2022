@@ -175,18 +175,6 @@ val.mae <- mae(val2$kickReturnYardage, nn.yard.val.predict) # MAE
 RMSE: 8.33
 MAE: 5.28
 
-## Fit on Test
-```{r fit on test}
-nn.yard.test.predict <- predict(nn.yard.model, newdata = test2)
-
-# Calculate RMSE and MAE
-test.rmse <- sqrt(mean((nn.yard.test.predict - test2$kickReturnYardage)^2)) # RMSE
-test.mae <- mae(test2$kickReturnYardage, nn.yard.test.predict) # MAE
-```
-> Performance Metrics:
-RMSE: 11.45
-MAE: 6.83
-
 
 ############################# TRY WITH ALL DATA (not including zones) ##################################
 ## Model Creation
@@ -206,18 +194,6 @@ val.mae <- mae(val2$kickReturnYardage, nn.yard.val.predict) # MAE
 > Performance Metrics:
 RMSE: 8.42
 MAE: 5.73
-
-## Fit on Test
-```{r fit on test}
-nn.yard.test.predict <- predict(nn.yard.model, newdata = test)
-
-# Calculate RMSE and MAE
-test.rmse <- sqrt(mean((nn.yard.test.predict - test2$kickReturnYardage)^2)) # RMSE
-test.mae <- mae(test$kickReturnYardage, nn.yard.test.predict) # MAE
-```
-> Performance Metrics:
-RMSE: 11.49
-MAE: 6.99
 
 
 ############################# TRY WITH 44 VARIABLES (from trevor) ##################################
@@ -298,15 +274,3 @@ val3.mae <- mae(val3$kickReturnYardage, nn.yard.val3.predict) # MAE
 > Performance Metrics:
 RMSE: 8.03
 MAE: 5.39
-
-## Fit on Test
-```{r fit on test}
-nn.yard.test3.predict <- predict(nn.yard.model3, newdata = test3)
-
-# Calculate RMSE and MAE
-test3.rmse <- sqrt(mean((nn.yard.test3.predict - test3$kickReturnYardage)^2)) # RMSE
-test3.mae <- mae(test3$kickReturnYardage, nn.yard.test3.predict) # MAE
-```
-> Performance Metrics:
-RMSE: 11.37
-MAE: 6.81
