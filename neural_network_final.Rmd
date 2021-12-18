@@ -49,13 +49,17 @@ setwd("C:\\Users\\liamd\\Documents\\GitHub\\NFL_Big_Data_Bowl_2022\\data_folder"
 train <- read.csv("model train set.csv")
 val <- read.csv("model val set.csv")
 test <- read.csv("model test set.csv")
+
+train3 <- train[,c(4:40,63:64,66:68,70,71 )]
+val3 <- val[,c(4:40,63:64,66:68,70,71 )]
+test3 <- test[,c(4:40,63:64,66:68,70,71 )]
 ```
 
 ## Variable Analysis and Data Posturing (Train)
 ```{r variable analysis}
-# Remove def zone variables
+# Remove def zone variables & actual return direction
 train <- train %>% 
-  select(-41:-51)
+  select(-41:-51, -65)
 
 # Any variables with less than 10 values are labeled at categorical (13 because I wanted zone variables to be a factor)
 for (i in 1:length(train)) {
@@ -68,7 +72,7 @@ for (i in 1:length(train)) {
 train = train %>% filter(is.na(train$kickReturnYardage) == 0)
 
 #Getting variable importance from decision tree
-fit = rpart(train$kickReturnYardage ~ . , data = train[,c(4:60)])
+fit = rpart(train$kickReturnYardage ~ . , data = train[,c(4:59)])
 rpart.plot(fit)
 varimp.data = data.frame(fit$variable.importance)
 varimp.data$names = as.character(rownames(varimp.data))
@@ -89,18 +93,13 @@ var.sel <- varimp.data$names
 
 train2 <- train %>% 
   select(var.sel, kickReturnYardage, X, gameId, playId)
-
-outliers <- boxplot(train2$kickReturnYardage, plot=FALSE)$out
-train2['outlier_flag'] <- ifelse(train2$kickReturnYardage %in% outliers, "1", "0")
-
-train2$outlier_flag <- as.factor(train2$outlier_flag)
 ```
 
 ## Data Posturing (Validation)
 ```{r data posturing (validation)}
-# Remove def zone variables
+# Remove def zone variables & actual return direction
 val <- val %>% 
-  select(-41:-51)
+  select(-41:-51, -65)
 
 # Any variables with less than 10 values are labeled at categorical (16 because I wanted zone variables to be a factor)
 for (i in 1:length(val)) {
@@ -122,21 +121,16 @@ for (i in 4:length(val)) {
 
 val$kickReturnYardage <- as.numeric(val$kickReturnYardage)
 
-# Subset variables and flag outliers
+# Subset variables
 val2 <- val %>% 
   select(var.sel, X, kickReturnYardage, gameId, playId)
-
-outliersval <- boxplot(val2$kickReturnYardage, plot=FALSE)$out
-val2['outlier_flag'] <- ifelse(val2$kickReturnYardage %in% outliersval, "1", "0")
-
-val2$outlier_flag <- as.factor(val2$outlier_flag)
 ```
 
 ## Data Posturing (test)
 ```{r data posturing (test)}
-# Remove def zone variables
+# Remove def zone variables & actual return direction
 test <- test %>% 
-  select(-41:-51)
+  select(-41:-51, -65)
 
 # Any variables with less than 10 values are labeled at categorical (16 because I wanted zone variables to be a factor)
 for (i in 1:length(test)) {
@@ -158,14 +152,9 @@ for (i in 4:length(test)) {
 
 test$kickReturnYardage <- as.numeric(test$kickReturnYardage)
 
-# Subset variables and flag outliers
+# Subset variables
 test2 <- test %>% 
   select(var.sel, X, kickReturnYardage, gameId, playId)
-
-outlierstest <- boxplot(test2$kickReturnYardage, plot=FALSE)$out
-test2['outlier_flag'] <- ifelse(test2$kickReturnYardage %in% outlierstest, "1", "0")
-
-test2$outlier_flag <- as.factor(test2$outlier_flag)
 ```
 
 ## Model Creation
@@ -183,8 +172,8 @@ val.rmse <- sqrt(mean((nn.yard.val.predict - val2$kickReturnYardage)^2)) # RMSE
 val.mae <- mae(val2$kickReturnYardage, nn.yard.val.predict) # MAE
 ```
 > Performance Metrics:
-RMSE: 7.93
-MAE: 5.93
+RMSE: 8.33
+MAE: 5.28
 
 ## Fit on Test
 ```{r fit on test}
@@ -195,42 +184,15 @@ test.rmse <- sqrt(mean((nn.yard.test.predict - test2$kickReturnYardage)^2)) # RM
 test.mae <- mae(test2$kickReturnYardage, nn.yard.test.predict) # MAE
 ```
 > Performance Metrics:
-RMSE: 10.51
-MAE: 7.94
+RMSE: 11.45
+MAE: 6.83
 
 
-############################# TRY WITH ALL DATA ##################################
-## Variable Analysis and Data Posturing (Train)
-```{r variable analysis}
-# Flag Outliers
-outliers <- boxplot(train$kickReturnYardage, plot=FALSE)$out
-train['outlier_flag'] <- ifelse(train$kickReturnYardage %in% outliers, "1", "0")
-
-train$outlier_flag <- as.factor(train$outlier_flag)
-```
-
-## Data Posturing (Validation)
-```{r data posturing (validation)}
-# Flag outliers
-outliersval <- boxplot(val$kickReturnYardage, plot=FALSE)$out
-val['outlier_flag'] <- ifelse(val$kickReturnYardage %in% outliersval, "1", "0")
-
-val$outlier_flag <- as.factor(val$outlier_flag)
-```
-
-## Data Posturing (test)
-```{r data posturing (test)}
-# Flag outliers
-outlierstest <- boxplot(test$kickReturnYardage, plot=FALSE)$out
-test['outlier_flag'] <- ifelse(test$kickReturnYardage %in% outlierstest, "1", "0")
-
-test$outlier_flag <- as.factor(test$outlier_flag)
-```
-
+############################# TRY WITH ALL DATA (not including zones) ##################################
 ## Model Creation
 ```{r model creation}
 set.seed(123)
-nn.yard.model <- nnet(kickReturnYardage ~ . -gameId -playId, data = train, size = 6, decay = .945, linout = TRUE )
+nn.yard.model <- nnet(kickReturnYardage ~ . -gameId -playId, data = train, size = 6, decay = 1, linout = TRUE )
 ```
 
 ## Fit on Validation
@@ -242,8 +204,8 @@ val.rmse <- sqrt(mean((nn.yard.val.predict - val$kickReturnYardage)^2)) # RMSE
 val.mae <- mae(val2$kickReturnYardage, nn.yard.val.predict) # MAE
 ```
 > Performance Metrics:
-RMSE: 8.15
-MAE: 5.24
+RMSE: 8.42
+MAE: 5.73
 
 ## Fit on Test
 ```{r fit on test}
@@ -254,5 +216,97 @@ test.rmse <- sqrt(mean((nn.yard.test.predict - test2$kickReturnYardage)^2)) # RM
 test.mae <- mae(test$kickReturnYardage, nn.yard.test.predict) # MAE
 ```
 > Performance Metrics:
-RMSE: 11.51
+RMSE: 11.49
 MAE: 6.99
+
+
+############################# TRY WITH 44 VARIABLES (from trevor) ##################################
+## Variable Analysis and Data Posturing (Train)
+```{r variable analysis}
+# Any variables with less than 10 values are labeled at categorical (13 because I wanted zone variables to be a factor)
+for (i in 1:length(train3)) {
+  if (length(unique(train3[,i])) < 16) {
+    train3[,i] = as.factor(train3[,i])
+  }
+}
+
+# Filter out NA observations
+train3 = train3 %>% filter(is.na(train3$kickReturnYardage) == 0)
+
+# Scale standardize 
+for (i in 4:length(train3)) {
+  if (class(train3[,i]) == c('numeric', 'integer')) {
+    train3[,i] = scale(train3[,i])
+  }
+}
+```
+
+## Data Posturing (Validation)
+```{r data posturing (validation)}
+# Any variables with less than 10 values are labeled at categorical (13 because I wanted zone variables to be a factor)
+for (i in 1:length(val3)) {
+  if (length(unique(val3[,i])) < 16) {
+    val3[,i] = as.factor(val3[,i])
+  }
+}
+
+# Filter out NA observations
+val3 = val3 %>% filter(is.na(val3$kickReturnYardage) == 0)
+
+# Scale standardize 
+for (i in 4:length(val3)) {
+  if (class(val3[,i]) == c('numeric', 'integer')) {
+    val3[,i] = scale(val3[,i])
+  }
+}
+```
+
+## Data Posturing (test)
+```{r data posturing (test)}
+# Any variables with less than 10 values are labeled at categorical (13 because I wanted zone variables to be a factor)
+for (i in 1:length(test3)) {
+  if (length(unique(test3[,i])) < 16) {
+    test3[,i] = as.factor(test3[,i])
+  }
+}
+
+# Filter out NA observations
+test3 = test3 %>% filter(is.na(test3$kickReturnYardage) == 0)
+
+# Scale standardize 
+for (i in 4:length(test3)) {
+  if (class(test3[,i]) == c('numeric', 'integer')) {
+    test3[,i] = scale(test3[,i])
+  }
+}
+```
+
+## Model Creation
+```{r model creation}
+set.seed(123)
+nn.yard.model3 <- nnet(kickReturnYardage ~ . , data = train3, size = 3, decay = .35, linout = TRUE )
+```
+
+## Fit on Validation
+```{r fit on validation}
+nn.yard.val3.predict <- predict(nn.yard.model3, newdata = val3)
+
+# Calculate RMSE and MAE
+val3.rmse <- sqrt(mean((nn.yard.val3.predict - val3$kickReturnYardage)^2)) # RMSE
+val3.mae <- mae(val3$kickReturnYardage, nn.yard.val3.predict) # MAE
+```
+> Performance Metrics:
+RMSE: 8.03
+MAE: 5.39
+
+## Fit on Test
+```{r fit on test}
+nn.yard.test3.predict <- predict(nn.yard.model3, newdata = test3)
+
+# Calculate RMSE and MAE
+test3.rmse <- sqrt(mean((nn.yard.test3.predict - test3$kickReturnYardage)^2)) # RMSE
+test3.mae <- mae(test3$kickReturnYardage, nn.yard.test3.predict) # MAE
+```
+> Performance Metrics:
+RMSE: 11.37
+MAE: 6.81
