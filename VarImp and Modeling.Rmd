@@ -16,6 +16,9 @@ library(ggplot2)
 library(xgboost)
 library(caret)
 library(Ckmeans.1d.dp)
+library(nnet)
+library(NeuralNetTools)
+library(Metrics)
 ```
 
 
@@ -44,7 +47,7 @@ for (i in 1:length(train)) {
     train[,i] = as.factor(train[,i])
   }
 }
-  
+
 train = train %>% filter(is.na(train$kickReturnYardage) == 0)
 
 for (i in 1:length(val)) {
@@ -149,9 +152,9 @@ varlist2=  list(c(5, 8:40,63,64,66:70 ), c(5, 8:40,63,64,66:68,70,71 ))
 varlist3 = list(c(4:5, 8:40,63,64,66:71 ),c(4:6, 8:40,64,66:71 ),c(4:6, 8:40,63,64,67:71 ),c(4:6, 8:40,63,64,66,67,69:71 ),c(4:6, 8:40,63,64,66:70 ), c(4:6, 8:40,63,64,66:68,70,71 ), c(4:6, 8:40,63,64,66,68:71 ) )
 
 num = 0
-for (vars in varlist2){
+#for (vars in varlist2){
 #Placeholder loop if not looping through different groups of variables
-#for (j in 1) {
+for (j in 1) {
   num = num + 1
   for (i in 1:2){
     print(paste("Half ", i))
@@ -163,7 +166,7 @@ for (vars in varlist2){
       train.h = train %>% filter(return_x >= 28)
     }
     #No sides or zones of defenders included
-    train_x = model.matrix(kickReturnYardage ~ ., data = train.h[,vars])[,-1]
+    train_x = model.matrix(kickReturnYardage ~ ., data = train.h[,c(5, 8:40,63,64,66:71 )])[,-1]
     train_y = train.h$kickReturnYardage
   
     tune_grid = expand.grid(
@@ -219,6 +222,8 @@ for (vars in varlist2){
 #Run halves xgboost on validation
 ```{r}
 half_xgbs = list(xgb.punt.h1, xgb.punt.h2)
+val.preds.h1 = data.frame()
+val.preds.h2 = data.frame()
 
 for (i in 1:2){
   if (i == 1) {
@@ -234,18 +239,87 @@ for (i in 1:2){
   val.h$xgb_half_pred = predict(half_xgbs[i], type = "response", val_x)[[1]]
   
   assign(paste0("val.mae.h", i), MAE(val.h$xgb_half_pred, val.h$kickReturnYardage))
+  
+  #Storing predictions for ensemble model
+  assign(paste0("val.preds.h",i), val.h)
 }
 
-half_xgbs[[1]]$feature_names
-val_x
+
+
 (val.mae.h1*nrow(val.h1) + val.mae.h2*nrow(val.h2))/nrow(val)
 
 #Weighted Val MAE of 5.190 for c(4:6, 8:40,63:71 )
 #Weighted Val MAE of 5.187 for c(4:40,63:68,70,71 )
 
 
-
 #Weighted Val MAE of 5.314 for c(5, 8:40,63,64,66:71 ) 
+
+val.preds.xgb = rbind(val.preds.h1, val.preds.h2)
+```
+
+
+
+################################## Liam's NN Model ###################################
+
+```{r}
+#Getting variable importance from decision tree
+fit = rpart(train$kickReturnYardage ~ . , data = train[,c(4:40,52:64,66:71)])
+rpart.plot(fit)
+varimp.data = data.frame(fit$variable.importance)
+varimp.data$names = as.character(rownames(varimp.data))
+varimp.data
+
+
+train2 = train
+val2 = val
+
+# Scale standardize 
+trainScale = preProcess(train2[4:71])
+train2 = cbind( train2[1:3], predict(trainScale, train2[4:71]))
+val2 = cbind( val2[1:3], predict(trainScale, val2[4:71]))
+
+
+
+# Check columns data types
+sapply(train2, class) # Dataset contains numeric, integer, and factor variables
+
+# Using varimp.data output. Cutoff of 700 for fit.variable.importance
+var.sel <- varimp.data$names
+
+train2 <- train2 %>% 
+  select(var.sel, kickReturnYardage, X, gameId, playId)
+
+val2 <- val2 %>% 
+  select(var.sel, X, kickReturnYardage, gameId, playId)
+
+#Create Neural Network
+set.seed(123)
+nn.yard.model <- nnet(kickReturnYardage ~ . -gameId -playId -X, data = train2, size = 6, decay = .945, linout = TRUE )
+
+nn.yard.val.predict <- predict(nn.yard.model, newdata = val2)
+
+val.unscale.predictions = sd(train$kickReturnYardage, na.rm = TRUE) * nn.yard.val.predict + mean(train$kickReturnYardage, na.rm = TRUE)
+
+# Calculate RMSE and MAE
+val.rmse <- sqrt(mean((nn.yard.val.predict - val2$kickReturnYardage)^2)) # RMSE
+val.mae <- mae(val2$kickReturnYardage, nn.yard.val.predict) # MAE
+
+mae(val$kickReturnYardage, val.unscale.predictions)
+#5.258 with scaled target on Liam's variables
+#5.69 without scaling target on Liam's variables
+
+val.preds.nn = cbind(val, val.unscale.predictions)
+```
+
+
+############################# Combining XGBoost and NN ################################
+```{r}
+val.preds.all = merge(val.preds.xgb, val.preds.nn[c(2,3,76)], by = c("gameId", "playId"))
+
+mae(val.preds.all$kickReturnYardage, (val.preds.all$xgb_half_pred + val.preds.all$val.unscale.predictions )/2)
+
+#lm(kickReturnYardage ~ xgb_half_pred + val.unscale.predictions, data = train.preds.all)
+
 ```
 
 
