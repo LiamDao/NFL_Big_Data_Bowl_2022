@@ -1,0 +1,335 @@
+---
+title: "Final Ensemble Model"
+author: "Trevor Hughes"
+date: "12/19/2021"
+output: html_document
+---
+
+```{r}
+library(dplyr)
+library(smbinning)
+library(corpcor)
+library(car)
+library(rpart)
+library(rpart.plot)
+library(ggplot2)
+library(xgboost)
+library(caret)
+library(Ckmeans.1d.dp)
+library(nnet)
+library(NeuralNetTools)
+library(Metrics)
+```
+
+#read in data
+```{r}
+model_set = read.csv("C:\\Users\\thughes\\Documents\\model set.csv")
+train = read.csv("C:\\Users\\thughes\\Documents\\model train set.csv")
+val = read.csv("C:\\Users\\thughes\\Documents\\model val set.csv")
+full_set = read.csv("C:\\Users\\thughes\\Documents\\full set.csv")
+
+```
+
+```{r}
+#Change all variables with less than 16 unique values to factor
+for (i in 1:length(train)) {
+  if (length(unique(train[,i])) < 16) {
+    train[,i] = as.factor(train[,i])
+  }
+}
+
+train = train %>% filter(is.na(train$kickReturnYardage) == 0)
+
+for (i in 1:length(val)) {
+  if (length(unique(val[,i])) < 16) {
+    val[,i] = as.factor(val[,i])
+  }
+}
+  
+val = val %>% filter(is.na(val$kickReturnYardage) == 0)
+
+for (i in 1:length(full_set)) {
+  if (length(unique(full_set[,i])) < 16) {
+    full_set[,i] = as.factor(full_set[,i])
+  }
+}
+  
+full_set = full_set %>% filter(is.na(full_set$kickReturnYardage) == 0)
+```
+
+
+
+######################################### XGBoost ######################################
+```{r}
+train.h1 = train %>% filter(return_x < 28)
+train.h2 = train %>% filter(return_x >= 28)
+
+levels(val$return_zone) = c(levels(val$return_zone), "9")
+val.h1 = val %>% filter(return_x < 28)
+val.h2 = val %>% filter(return_x >= 28)
+
+```
+
+
+```{r}
+
+for (i in 1:2){
+  print(paste("Half ", i))
+    
+  if (i == 1) {
+    train.h = train %>% filter(return_x < 28)
+  }
+  else {
+    train.h = train %>% filter(return_x >= 28)
+  }
+  #No sides or zones of defenders included
+  train_x = model.matrix(kickReturnYardage ~ ., 
+                         data = train.h[,c(5, 8:40,63,64,66:71 )])[,-1]
+  train_y = train.h$kickReturnYardage
+  
+  tune_grid = expand.grid(
+    nrounds = 4,
+    eta = c(.1, .15, .2, .25, .3),
+    max_depth = c(1:10),
+    gamma = c(0),
+    colsample_bytree = 1,
+    min_child_weight = 1,
+    subsample = c(.25, .5, .75, 1)
+  )
+
+  set.seed(123)
+  xgb.punt.caret = train(x = train_x, y = train_y, method = "xgbTree", 
+                         tuneGrid = tune_grid, 
+                         trControl = trainControl(method = 'cv', number = 10),
+                         metric = 'MAE')
+
+  set.seed(123)
+  assign(paste0("xgb.punt.h", i), xgboost(data = train_x, label = train_y, 
+                         subsample = xgb.punt.caret$bestTune$subsample, nrounds = 4, 
+                         eta = xgb.punt.caret$bestTune$eta,
+                         max_depth = xgb.punt.caret$bestTune$max_depth, 
+                         prediction = T, eval_metric = 'mae'))
+
+  set.seed(123)
+  xgb.punt.h = xgboost(data = train_x, label = train_y, 
+                         subsample = xgb.punt.caret$bestTune$subsample, nrounds = 4, 
+                         eta = xgb.punt.caret$bestTune$eta,
+                         max_depth = xgb.punt.caret$bestTune$max_depth, 
+                         prediction = T, eval_metric = 'mae')
+
+
+  #x = xgb.importance(feature_names = colnames(train_x), model = xgb.punt.final)
+  #print(x)
+    
+  g = xgb.ggplot.importance(xgb.importance(feature_names = colnames(train_x),
+                                           model = xgb.punt.h)) + 
+    ggtitle(paste("Feature Importance Half", i))
+  print(g)
+  
+  assign(paste0("preds", i), 
+                predict(xgb.punt.h, type = "response", train_x))
+}
+
+train.h1$XGBpreds = preds1
+train.h2$XGBpreds = preds2
+train.preds = rbind(train.h1, train.h2)
+mae(train.preds$XGBpreds, train.preds$kickReturnYardage)
+
+#c(5, 8:40,63,64,66:71 ) MAE of 4.729
+
+
+```
+
+
+#Run halves xgboost on validation
+```{r}
+half_xgbs = list(xgb.punt.h1, xgb.punt.h2)
+val.preds.h1 = data.frame()
+val.preds.h2 = data.frame()
+
+for (i in 1:2){
+  if (i == 1) {
+      val.h = val %>% filter(return_x < 28)
+    }
+    else {
+      val.h = val %>% filter(return_x >= 28)
+    }
+  
+  val_x = model.matrix(kickReturnYardage ~ ., data = val.h[,c(5, 8:40,63,64,66:71 )])[,-1]
+  val_y = val.h$kickReturnYardage
+  
+  val.h$XGBpreds = predict(half_xgbs[i], type = "response", val_x)[[1]]
+  
+  assign(paste0("val.mae.h", i), MAE(val.h$XGBpreds, val.h$kickReturnYardage))
+  
+  #Storing predictions for ensemble model
+  assign(paste0("val.preds.h",i), val.h)
+}
+
+
+
+(val.mae.h1*nrow(val.h1) + val.mae.h2*nrow(val.h2))/nrow(val)
+
+#Weighted Val MAE of 5.314 for c(5, 8:40,63,64,66:71 ) 
+
+#Combine predictions into one data set for ensemble
+val.preds.xgb = rbind(val.preds.h1, val.preds.h2)
+```
+
+
+#################################### Neural Network ####################################
+
+
+```{r}
+#Getting variable importance from decision tree
+fit = rpart(train$kickReturnYardage ~ . , data = train[,c(4:40,52:64,66:71)])
+rpart.plot(fit)
+varimp.data = data.frame(fit$variable.importance)
+varimp.data$names = as.character(rownames(varimp.data))
+varimp.data
+
+
+train2 = train
+val2 = val
+
+# Scale standardize 
+trainScale = preProcess(train2[4:71])
+train2 = cbind( train2[1:3], predict(trainScale, train2[4:71]))
+val2 = cbind( val2[1:3], predict(trainScale, val2[4:71]))
+
+
+
+# Check columns data types
+sapply(train2, class) # Dataset contains numeric, integer, and factor variables
+
+# Using varimp.data output. Cutoff of 700 for fit.variable.importance
+var.sel <- varimp.data$names
+
+train2 <- train2 %>% 
+  select(var.sel, kickReturnYardage, X, gameId, playId)
+
+val2 <- val2 %>% 
+  select(var.sel, X, kickReturnYardage, gameId, playId)
+
+#Create Neural Network
+set.seed(123)
+nn.yard.model <- nnet(kickReturnYardage ~ . -gameId -playId -X, data = train2, size = 6, decay = .945, linout = TRUE )
+
+#Add unscaled predictions to train.preds df
+train2$NNpreds = sd(train$kickReturnYardage, na.rm = TRUE) * predict(nn.yard.model, train2)+ mean(train$kickReturnYardage, na.rm = TRUE)
+train.preds = merge(train.preds, train2[c(21:23)],by = c("gameId", "playId") )
+mae(train.preds$kickReturnYardage, train.preds$NNpreds)
+#MAE of 5.255 on train
+
+nn.yard.val.predict <- predict(nn.yard.model, newdata = val2)
+
+# Calculate RMSE and MAE on scaled target
+val.rmse <- sqrt(mean((nn.yard.val.predict - val2$kickReturnYardage)^2)) # RMSE
+val.mae <- mae(val2$kickReturnYardage, nn.yard.val.predict) # MAE
+
+#Since predictions are on a scaled target variable, must unscale the predictions
+val.preds.nn = val
+val.preds.nn$NNpreds = sd(train$kickReturnYardage, na.rm = TRUE) * nn.yard.val.predict + mean(train$kickReturnYardage, na.rm = TRUE)
+
+mae(val$kickReturnYardage, val.unscale.predictions)
+#MAE of 5.258 on val after unscaling predictions
+
+
+
+```
+
+
+
+############################# Combining XGBoost and NN ################################
+```{r}
+val.preds = merge(val.preds.xgb, val.preds.nn[c(2,3,76)], by = c("gameId", "playId"))
+
+#Simple average
+mae(train.preds$kickReturnYardage, (train.preds$XGBpreds + train.preds$NNpreds )/2)
+#MAE of 4.576 on train
+mae(val.preds$kickReturnYardage, (val.preds$XGBpreds + val.preds$NNpreds )/2)
+#MAE of 4.872 on val
+
+
+#Linear model ensemble
+lm.ensemble = lm(kickReturnYardage ~ XGBpreds + NNpreds, data = train.preds)
+train.preds$ENS_LMpreds = predict(lm.ensemble, train.preds)
+val.preds$ENS_LMpreds = predict(lm.ensemble, val.preds)
+
+mae(train.preds$kickReturnYardage, train.preds$ENS_LMpreds)
+#MAE of 4.131 on train
+mae(val.preds$kickReturnYardage, val.preds$ENS_LMpreds)
+#MAE of 5.504 on val
+
+
+#Neural Network Ensemble
+nn.ensemble <- nnet(kickReturnYardage ~ NNpreds + XGBpreds, data = train.preds, size = 1, linout = TRUE )
+
+train.preds$ENS_NNpreds = predict(nn.ensemble, train.preds)
+val.preds$ENS_NNpreds = predict(nn.ensemble, val.preds)
+
+mae(train.preds$kickReturnYardage, train.preds$ENS_NNpreds)
+#MAE of 3.9168 on train
+mae(val.preds$kickReturnYardage, val.preds$ENS_NNpreds)
+#MAE of 5.314 on val
+```
+
+
+
+
+#################### Applying model to determine best returner/teams ###################
+
+
+```{r}
+#Calculate XGB predictions on full data set
+full.h1 = full_set %>% filter(return_x < 28)
+full.h2 = full_set %>% filter(return_x >= 28)
+
+
+half_xgbs = list(xgb.punt.h1, xgb.punt.h2)
+
+full.preds = data.frame()
+for (i in 1:2){
+  if (i == 1) {
+      full.h = full_set %>% filter(return_x < 28)
+    }
+    else {
+      full.h = full_set %>% filter(return_x >= 28)
+    }
+  
+  full_x = model.matrix(kickReturnYardage ~ ., data = full.h[,c(5, 8:40,63,64,66:71 )])[,-1]
+  full_y = full.h$kickReturnYardage
+  
+  full.h$XGBpreds = predict(half_xgbs[i], type = "response", full_x)[[1]]
+  full.preds = rbind(full.h, full.preds)
+
+}
+
+
+
+#Calculate NN predictions on full data set
+
+full2 = cbind( full_set[1:3], predict(trainScale, full_set[4:71]))
+
+full2 <- full2 %>% 
+  select(var.sel, X, kickReturnYardage, gameId, playId)
+
+nn.yard.full.predict <- predict(nn.yard.model, newdata = full2)
+full2$NNpreds = sd(train$kickReturnYardage, na.rm = TRUE) * nn.yard.full.predict + mean(train$kickReturnYardage, na.rm = TRUE)
+
+#Combine both full sets
+full.preds = merge(full.preds, full2[21:23], by = c("gameId", "playId"))
+
+
+```
+
+
+
+```{r}
+full.preds$ENS_AVGpreds = (full.preds$NNpreds + full.preds$XGBpreds)/2
+full.preds$yard_dif = full.preds$kickReturnYardage - full.preds$ENS_AVGpreds
+
+full.preds %>% group_by(returnerId) %>% summarise(yards_over_expected = mean(yard_dif)) %>% arrange(desc(yards_over_expected))
+
+
+```
