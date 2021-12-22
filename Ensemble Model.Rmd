@@ -231,7 +231,7 @@ val.mae <- mae(val2$kickReturnYardage, nn.yard.val.predict) # MAE
 val.preds.nn = val
 val.preds.nn$NNpreds = sd(train$kickReturnYardage, na.rm = TRUE) * nn.yard.val.predict + mean(train$kickReturnYardage, na.rm = TRUE)
 
-mae(val$kickReturnYardage, val.unscale.predictions)
+mae(val$kickReturnYardage, val.preds.nn$NNpreds)
 #MAE of 5.258 on val after unscaling predictions
 
 
@@ -329,7 +329,14 @@ full.preds = merge(full.preds, full2[21:23], by = c("gameId", "playId"))
 full.preds$ENS_AVGpreds = (full.preds$NNpreds + full.preds$XGBpreds)/2
 full.preds$yard_dif = full.preds$kickReturnYardage - full.preds$ENS_AVGpreds
 
-full.preds %>% group_by(returnerId) %>% summarise(yards_over_expected = mean(yard_dif)) %>% arrange(desc(yards_over_expected))
+#Find best & worst returners
+full.preds %>% group_by(returnerId, punt_returner_player_name) %>% summarise(yards_over_expected = mean(yard_dif)) %>% arrange(desc(yards_over_expected))
+
+#Find best & worst teams with getting in position
+full.preds %>% group_by(possessionTeam) %>% summarise(yards_expected = mean(ENS_AVGpreds)) %>% arrange(desc(yards_expected))
+
+#Find best & worst teams with punt coverage compared to expected
+full.preds %>% group_by(possessionTeam) %>% summarise(yards_over_expected = mean(yard_dif)) %>% arrange(desc(yards_over_expected))
 
 
 ```
