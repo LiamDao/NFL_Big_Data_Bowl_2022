@@ -19,6 +19,11 @@ library(Ckmeans.1d.dp)
 library(nnet)
 library(NeuralNetTools)
 library(Metrics)
+
+# Create scaling function for variable importance
+scale_01 <- function(x) {                              
+  (x - min(x)) / (max(x) - min(x))
+}
 ```
 
 #read in data
@@ -118,8 +123,8 @@ for (i in 1:2){
                          prediction = T, eval_metric = 'mae')
 
 
-  #x = xgb.importance(feature_names = colnames(train_x), model = xgb.punt.final)
-  #print(x)
+  assign(paste0("imp.h", i), xgb.importance(feature_names = colnames(train_x), model = xgb.punt.h))
+  
     
   g = xgb.ggplot.importance(xgb.importance(feature_names = colnames(train_x),
                                            model = xgb.punt.h)) + 
@@ -130,6 +135,7 @@ for (i in 1:2){
                 predict(xgb.punt.h, type = "response", train_x))
 }
 
+
 train.h1$XGBpreds = preds1
 train.h2$XGBpreds = preds2
 train.preds = rbind(train.h1, train.h2)
@@ -137,7 +143,15 @@ mae(train.preds$XGBpreds, train.preds$kickReturnYardage)
 
 #c(5, 8:40,63,64,66:71 ) MAE of 4.729
 
+#Variable importance
+imp.h = merge(imp.h1[,c(1,2)], imp.h2[,c(1,2)], by = "Feature", all = TRUE)
+imp.h$Gain.x = ifelse(is.na(imp.h$Gain.x), 0, imp.h$Gain.x)
+imp.h$Gain.y = ifelse(is.na(imp.h$Gain.y), 0, imp.h$Gain.y)
 
+imp.h$Gain = (imp.h$Gain.x*length(train.h1) + imp.h$Gain.y*length(train.h2))/length(train)
+
+imp.h$scaledImpHalf = scale_01(imp.h$Gain)
+imp.h = imp.h %>% arrange(desc(scaledImpHalf))
 ```
 
 
@@ -234,36 +248,117 @@ val.preds.nn$NNpreds = sd(train$kickReturnYardage, na.rm = TRUE) * nn.yard.val.p
 mae(val$kickReturnYardage, val.preds.nn$NNpreds)
 #MAE of 5.258 on val after unscaling predictions
 
+#Variable importance
+imp.nn.garson = garson(nn.yard.model)
+imp.nn = data.frame(cbind(Feature = levels(imp.nn.garson$data$x_names) ,GarsonImp = imp.nn.garson$data$rel_imp))
 
-
+imp.nn$scaledImpNN = scale_01(as.numeric(imp.nn$GarsonImp))
 ```
 
 
+############################ Pranav's Offensive Model #################################
 
-############################# Combining XGBoost and NN ################################
+
+```{r}
+#Included only listed variables
+train_x = model.matrix(kickReturnYardage ~ ., 
+                       data = train_off[,c(3:36,92,93,95:100 )])[,-1]
+train_y = train_off$kickReturnYardage
+
+# Build XGBoost model
+set.seed(123)
+#xgb <- xgb.cv(data = train_x, label = train_y, subsample = 0.5, nrounds = 100, nfold = 10, eval.metric = 'mae')
+#[4]	test MAE lowest at nrounds = 4
+
+## Caret Tuning
+#set seed
+set.seed(123)
+# Tuning through caret
+tune_grid = expand.grid(
+    nrounds = 5,
+    eta = c(.1, .15, .2, .25, .3),
+    max_depth = c(1:10),
+    gamma = c(0),
+    colsample_bytree = 1,
+    min_child_weight = 1,
+    subsample = c(.25, .5, .75, 1))
+
+#set seed
+set.seed(123)
+#build caret tuning
+xgb.punt.caret = train(x = train_x, y = train_y, method = "xgbTree", 
+                         tuneGrid = tune_grid, 
+                         trControl = trainControl(method = 'cv', number = 10),
+                         metric = 'MAE')
+
+#plot tuning grid
+plot(xgb.punt.caret)
+#4 rounds
+#0.3 eta
+#subsample of 1.00
+
+#xgb.punt.jamaica <- xgb.cv(data = train_x, label = train_y, subsample = 1, nrounds = 100, nfold = 10, eta = 0.3, max_depth = 4, eval.metric = 'mae')
+#best at 6?
+
+############################################################################################################
+xgb.punt.jamaica <-  xgboost(data = train_x, label = train_y, 
+                         subsample = xgb.punt.caret$bestTune$subsample, nrounds = 5, 
+                         eta = xgb.punt.caret$bestTune$eta,
+                         max_depth = xgb.punt.caret$bestTune$max_depth, 
+                         prediction = T, eval_metric = 'mae')
+#MAE = 4.796
+
+
+#xgb.punt.jamaica <- xgboost(data = train_x, label = train_y, subsample = 1, nrounds = 6, eta = 0.3, max_depth = 4, eval.metric = 'mae')
+#MAE = 4.838582
+############################################################################################################
+
+train.off.preds = train_off
+val.off.preds = val_off
+
+train.off.preds$OFFpreds = predict(xgb.punt.jamaica, type = "response", train_x)
+train.preds = merge(train.preds, train.off.preds[c(1,2,101)], by = c("gameId", "playId"))
+
+levels(val_off$return_zone) = c(levels(val_off$return_zone), "9")
+val_x = model.matrix(kickReturnYardage ~ ., data = val_off[,c(3:36,92,93,95:100 )])[,-1]
+val_y = val_off$kickReturnYardage
+
+val.off.preds$OFFpreds = predict(xgb.punt.jamaica, type = "response", val_x)
+MAE(val.off.preds$OFFpreds, val.off.preds$kickReturnYardage)
+#Val MAE of 6.294
+
+#Variable Importance
+imp.off = xgb.importance(feature_names = colnames(train_x), model = xgb.punt.jamaica)
+imp.off$scaledImpOff = scale_01(imp.off$Gain)
+
+```
+
+############################### Combining the 3 models #################################
 ```{r}
 val.preds = merge(val.preds.xgb, val.preds.nn[c(2,3,76)], by = c("gameId", "playId"))
+val.preds = merge(val.preds, val.off.preds[c(1,2,101)], by = c("gameId", "playId"))
 
 #Simple average
-mae(train.preds$kickReturnYardage, (train.preds$XGBpreds + train.preds$NNpreds )/2)
-#MAE of 4.576 on train
-mae(val.preds$kickReturnYardage, (val.preds$XGBpreds + val.preds$NNpreds )/2)
-#MAE of 4.872 on val
+mae(train.preds$kickReturnYardage, (train.preds$XGBpreds + train.preds$NNpreds + train.preds$OFFpreds)/3)
+#MAE of 4.550
+mae(val.preds$kickReturnYardage, (val.preds$XGBpreds + val.preds$NNpreds + val.preds$OFFpreds)/3)
+#MAE of 3.643
 
 
 #Linear model ensemble
-lm.ensemble = lm(kickReturnYardage ~ XGBpreds + NNpreds, data = train.preds)
+lm.ensemble = lm(kickReturnYardage ~ XGBpreds + NNpreds + OFFpreds, data = train.preds)
+lm.ensemble
 train.preds$ENS_LMpreds = predict(lm.ensemble, train.preds)
 val.preds$ENS_LMpreds = predict(lm.ensemble, val.preds)
 
 mae(train.preds$kickReturnYardage, train.preds$ENS_LMpreds)
-#MAE of 4.131 on train
+#MAE of 4.021
 mae(val.preds$kickReturnYardage, val.preds$ENS_LMpreds)
-#MAE of 5.504 on val
+#MAE of 5.189
 
 
 #Neural Network Ensemble
-nn.ensemble <- nnet(kickReturnYardage ~ NNpreds + XGBpreds, data = train.preds, size = 1, linout = TRUE )
+nn.ensemble <- nnet(kickReturnYardage ~ NNpreds + XGBpreds + OFFpreds, data = train.preds, size = 1, linout = TRUE )
 
 train.preds$ENS_NNpreds = predict(nn.ensemble, train.preds)
 val.preds$ENS_NNpreds = predict(nn.ensemble, val.preds)
@@ -274,7 +369,24 @@ mae(val.preds$kickReturnYardage, val.preds$ENS_NNpreds)
 #MAE of 5.314 on val
 ```
 
+############################ Combined Variable Importance ##############################
+```{r}
+#Join importance metrics
+imp.ensemble = full_join(imp.h[,c(1,5)],imp.off[,c(1,5)] , by = "Feature", all = TRUE)
+imp.ensemble = full_join(imp.ensemble, imp.nn[,c(1,3)], by = "Feature", all = TRUE)
+imp.ensemble$Feature == "returnDirectionIntendedR"
 
+#Set null values to 0 to allow addition
+imp.ensemble$scaledImpHalf = ifelse(is.na(imp.ensemble$scaledImpHalf), 0, imp.ensemble$scaledImpHalf)
+imp.ensemble$scaledImpNN = ifelse(is.na(imp.ensemble$scaledImpNN), 0, imp.ensemble$scaledImpNN)
+imp.ensemble$scaledImpOff = ifelse(is.na(imp.ensemble$scaledImpOff), 0, imp.ensemble$scaledImpOff)
+
+#Find average of importance metrics and sort in descending order
+imp.ensemble$avgScaledImp = (imp.ensemble$scaledImpHalf + imp.ensemble$scaledImpNN + imp.ensemble$scaledImpOff)/3
+imp.ensemble = imp.ensemble %>% arrange(desc(avgScaledImp))
+
+
+```
 
 
 #################### Applying model to determine best returner/teams ###################
