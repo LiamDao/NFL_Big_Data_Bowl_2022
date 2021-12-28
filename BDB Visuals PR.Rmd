@@ -30,7 +30,7 @@ full.preds$returnerTeam <- ifelse(full.preds$possessionTeam == full.preds$homeTe
 
 #Change all OAK to LV
 full.preds <- data.frame(lapply(full.preds, function(x) {
-                  gsub(c("LV", "OAK"), "LV", x)
+                  gsub("OAK", "LV", x)
               }))
 
 ```
