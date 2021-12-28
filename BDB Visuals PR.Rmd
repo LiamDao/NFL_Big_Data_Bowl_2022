@@ -19,19 +19,21 @@ library(reactablefmtr)
 
 
 ```{r, include = FALSE}
-#Minor data wrangling
-full.preds$ENS_AVGpreds = ((full.preds$NNpreds + full.preds$XGBpreds + full.preds$OFFpreds)/3)
-
-full.preds$yard_dif = full.preds$kickReturnYardage - full.preds$ENS_AVGpreds
+#Load in Trevor's final ensemble file
+full.preds <- read.csv("~/Documents/Documents/R Projects/full preds.txt")
+#Drop X column
+full.preds = full.preds %>% select(-"X")
 
 #Create new returnTeam column to implement logos
 full.preds['returnerTeam'] <- NA
 full.preds$returnerTeam <- ifelse(full.preds$possessionTeam == full.preds$homeTeamAbbr, full.preds$visitorTeamAbbr, full.preds$homeTeamAbbr)
 
 #Change all OAK to LV
-full.preds <- data.frame(lapply(full.preds, function(x) {
-                  gsub("OAK", "LV", x)
-              }))
+full.preds$possessionTeam = ifelse(full.preds$possessionTeam == "OAK", "LV", full.preds$possessionTeam)
+full.preds$returnerTeam = ifelse(full.preds$returnerTeam == "OAK", "LV", full.preds$returnerTeam)
+full.preds$visitorTeamAbbr = ifelse(full.preds$visitorTeamAbbr == "OAK", "LV", full.preds$visitorTeamAbbr)
+full.preds$homeTeamAbbr = ifelse(full.preds$homeTeamAbbr == "OAK", "LV", full.preds$homeTeamAbbr)
+
 
 ```
 
@@ -136,11 +138,7 @@ reactable(
     n = colDef(name = "Returns"),
     yards_given_up = colDef(name = "Avg Yards Given Up Per Return"),
     yards_expected_diff = colDef(name = "Avg +/-"),
-    yards_expected = colDef(name = "Avg Return Yards Expected",
-                                  cell = color_tiles(
-                                  bestworst1,
-                                  colors = c("#d7191c", "#ffffbf", "#1a9641"),
-                                  number_fmt = scales::number_format(accuracy = 0.01))),
+    yards_expected = colDef(name = "Avg Return Yards Expected"),
     team_logo_espn = colDef(name = "Team", cell = embed_img(coverteam1, label = "possessionTeam"))
       )
 )
