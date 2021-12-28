@@ -28,14 +28,22 @@ scale_01 <- function(x) {
 
 #read in data and create train, val, and test sets
 ```{r}
+final_set = read.csv("C:\\Users\\thughes\\Documents\\final set.csv")
 full_set = read.csv("C:\\Users\\thughes\\Documents\\full set.csv")
 
-
+final_set = final_set %>% select(-"X")
+full_set = full_set %>% select(-"X")
 
 #Change all variables with less than 16 unique values to factor
 for (i in 1:length(final_set)) {
   if (length(unique(final_set[,i])) < 16) {
     final_set[,i] = as.factor(final_set[,i])
+  }
+}
+
+for (i in 1:length(full_set)) {
+  if (length(unique(full_set[,i])) < 16) {
+    full_set[,i] = as.factor(full_set[,i])
   }
 }
 
@@ -45,7 +53,7 @@ set.seed(123)
 train = final_set %>% sample_frac(.7)
 non_train = anti_join(final_set, train, by = c('gameId', 'playId'))
 set.seed(123)
-val = non_train %>% sample_frac(.2)
+val = non_train %>% sample_frac(2/3)
 test = anti_join(non_train, val, by = c('gameId', 'playId'))
 
 #Remove missing values
@@ -160,7 +168,7 @@ imp.h = imp.h %>% arrange(desc(scaledImpHalf))
 ```
 
 
-#Run halves xgboost on validation
+#Run halves xgboost on validation 
 ```{r}
 half_xgbs = list(xgb.punt.h1, xgb.punt.h2)
 val.preds.h1 = data.frame()
@@ -185,11 +193,8 @@ for (i in 1:2){
   assign(paste0("val.preds.h",i), val.h)
 }
 
-
-
 (val.mae.h1*nrow(val.h1) + val.mae.h2*nrow(val.h2))/nrow(val)
-
-#Weighted Val MAE of 5.529
+#Weighted Val MAE of 6.455
 
 
 #Combine predictions into one data set for ensemble
@@ -250,8 +255,8 @@ val.preds.nn = val
 val.preds.nn$NNpreds = sd(train$kickReturnYardage, na.rm = TRUE) * nn.yard.val.predict + mean(train$kickReturnYardage, na.rm = TRUE)
 
 mae(val$kickReturnYardage, val.preds.nn$NNpreds)
-#MAE of 5.258 on val after unscaling predictions
-#6.182
+#MAE of 7.074 on val after unscaling predictions
+
 
 #Variable importance
 imp.nn.garson = garson(nn.yard.model)
@@ -323,7 +328,7 @@ val_y = val$kickReturnYardage
 
 val.off.preds$OFFpreds = predict(xgb.punt.jamaica, type = "response", val_x)
 MAE(val.off.preds$OFFpreds, val.off.preds$kickReturnYardage)
-#Val MAE of 5.112
+#Val MAE of 6.062
 
 #Variable Importance
 imp.off = xgb.importance(feature_names = colnames(train_x), model = xgb.punt.jamaica)
@@ -331,16 +336,21 @@ imp.off$scaledImpOff = scale_01(imp.off$Gain)
 
 ```
 
+
+
+########################################################################################
+
 ############################### Combining the 3 models #################################
 ```{r}
 val.preds = merge(val.preds.xgb, val.preds.nn[c(1,2,105)], by = c("gameId", "playId"))
 val.preds = merge(val.preds, val.off.preds[c(1,2,105)], by = c("gameId", "playId"))
 
 #Simple average
-mae(train.preds$kickReturnYardage, (train.preds$XGBpreds + train.preds$NNpreds + train.preds$OFFpreds)/3)
+mae(train.preds$kickReturnYardage, (train.preds$XGBpreds + train.preds$NNpreds + train.preds$OFFpreds) /3)
 #MAE of 4.612
+
 mae(val.preds$kickReturnYardage, (val.preds$XGBpreds + val.preds$NNpreds + val.preds$OFFpreds)/3)
-#MAE of 4.896
+#MAE of 5.967
 
 
 #Linear model ensemble
@@ -352,7 +362,7 @@ val.preds$ENS_LMpreds = predict(lm.ensemble, val.preds)
 mae(train.preds$kickReturnYardage, train.preds$ENS_LMpreds)
 #MAE of 4.07
 mae(val.preds$kickReturnYardage, val.preds$ENS_LMpreds)
-#MAE of 5.771
+#MAE of 6.832
 
 
 #Neural Network Ensemble
@@ -364,8 +374,89 @@ val.preds$ENS_NNpreds = predict(nn.ensemble, val.preds)
 mae(train.preds$kickReturnYardage, train.preds$ENS_NNpreds)
 #MAE of 6.607 on train
 mae(val.preds$kickReturnYardage, val.preds$ENS_NNpreds)
-#MAE of 5.927 on val
+#MAE of 6.756 on val
 ```
+
+################## Run final averaged ensemble model on test set #######################
+```{r}
+###Get test predictions from xgboost on defense
+test.preds.h1 = data.frame()
+test.preds.h2 = data.frame()
+
+for (i in 1:2){
+  if (i == 1) {
+      test.h = test %>% filter(return_x < 28)
+    }
+    else {
+      test.h = test %>% filter(return_x >= 28)
+    }
+  
+  test_x = model.matrix(kickReturnYardage ~ ., data = test.h[,c(3:5, 7:39,62,63,65:70 )])[,-1]
+  
+  test.h$XGBpreds = predict(half_xgbs[i], type = "response", test_x)[[1]]
+
+  #Storing predictions for ensemble model
+  assign(paste0("test.preds.h",i), test.h)
+}
+
+#Combine predictions into one data set for ensemble
+test.preds.xgb = rbind(test.preds.h1, test.preds.h2)
+
+
+###Get test predictions for neural net
+test2 = test
+
+test2 = cbind( test2[1:2], predict(trainScale, test2[3:104]))
+
+test2 <- test2 %>% 
+  select(var.sel, kickReturnYardage, gameId, playId)
+
+nn.yard.test.predict <- predict(nn.yard.model, newdata = test2)
+
+#Since predictions are on a scaled target variable, must unscale the predictions
+test.preds.nn = test
+test.preds.nn$NNpreds = sd(train$kickReturnYardage, na.rm = TRUE) * nn.yard.test.predict + mean(train$kickReturnYardage, na.rm = TRUE)
+
+
+###Get test predictions for defensive XGBoost
+test.off.preds = test
+
+test_x = model.matrix(kickReturnYardage ~ ., data = test[,c(3:5,62,63,65:100  )])[,-1]
+
+test.off.preds$OFFpreds = predict(xgb.punt.jamaica, type = "response", test_x)
+
+
+
+test.preds = merge(test.preds.xgb, test.preds.nn[c(1,2,105)], by = c("gameId", "playId"))
+test.preds = merge(test.preds, test.off.preds[c(1,2,105)], by = c("gameId", "playId"))
+
+#Simple average
+mae(test.preds$kickReturnYardage, (test.preds$XGBpreds + test.preds$NNpreds + test.preds$OFFpreds)/3)
+#MAE of 5.663
+#6.251 def
+#6.328 NN
+#5.886 off
+
+train.lm = train[,c(3:39,51:63,65:104)]
+lm.naive = lm(kickReturnYardage ~ . ,data = train.lm)
+train.lm$lmpreds = predict(lm.naive)
+mae(train.lm$kickReturnYardage, train.lm$lmpreds)
+
+val.lm = val[,c(3:39,51:63,65:104)]
+val.lm$lmpreds = predict(lm.naive, val.lm)
+mae(val.lm$kickReturnYardage, val.lm$lmpreds)
+
+test.lm = test[,c(3:39,51:63,65:104)]
+test.lm$lmpreds = predict(lm.naive, test.lm)
+mae(test.lm$kickReturnYardage, test.lm$lmpreds)
+
+full.lm = full_set[,c(3:39,51:63,65:104)]
+full.lm$lmpreds = predict(lm.naive, full.lm)
+mae(full.lm$kickReturnYardage, full.lm$lmpreds)
+```
+
+
+
 
 ############################ Combined Variable Importance ##############################
 ```{r}
@@ -450,6 +541,7 @@ full.preds = merge(full.preds, full3[c(1,2,134)], by = c("gameId", "playId"))
 
 ```{r}
 full.preds$ENS_AVGpreds = (full.preds$NNpreds + full.preds$XGBpreds + full.preds$OFFpreds)/3
+
 full.preds$yard_dif = full.preds$kickReturnYardage - full.preds$ENS_AVGpreds
 
 #Find best & worst returners
