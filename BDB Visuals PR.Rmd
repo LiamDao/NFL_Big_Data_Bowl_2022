@@ -20,6 +20,9 @@ library(reactablefmtr)
 
 ```{r, include = FALSE}
 #Minor data wrangling
+full.preds$ENS_AVGpreds = ((full.preds$NNpreds + full.preds$XGBpreds + full.preds$OFFpreds)/3)
+
+full.preds$yard_dif = full.preds$kickReturnYardage - full.preds$ENS_AVGpreds
 
 #Create new returnTeam column to implement logos
 full.preds['returnerTeam'] <- NA
@@ -65,7 +68,30 @@ reactable(
     punt_returner_player_name = colDef(show = FALSE),
     actual_yards = colDef(name = "Avg Actual Yards"),
     expected_yards = colDef(name = "Avg Expected Yards"),
-    yards_over_expected = colDef(name = "Avg Yards Over Expected"),
+    yards_over_expected = colDef(name = "Avg Yards Over Expected",
+                                 cell = data_bars_pos_neg(
+                                  bestworst1,
+                                  colors = c("#d7191c", "#ffffbf", "#1a9641"),
+                                  number_fmt = scales::number_format(accuracy = 0.01))),
+    team_logo_espn = colDef(name = "Player", cell = embed_img(bestworst1, label = "punt_returner_player_name")),
+    returnerId = colDef(show = FALSE)
+
+  )
+)
+
+reactable(
+  bestworst1,
+  columns = list(
+    n = colDef(name = "Returns"),
+    returnerTeam = colDef(show = FALSE),
+    punt_returner_player_name = colDef(show = FALSE),
+    actual_yards = colDef(name = "Avg Actual Yards"),
+    expected_yards = colDef(name = "Avg Expected Yards"),
+    yards_over_expected = colDef(name = "Avg Yards Over Expected",
+                                 cell = color_tiles(
+                                  bestworst1,
+                                  colors = c("#d7191c", "#ffffbf", "#1a9641"),
+                                  number_fmt = scales::number_format(accuracy = 0.01))),
     team_logo_espn = colDef(name = "Player", cell = embed_img(bestworst1, label = "punt_returner_player_name")),
     returnerId = colDef(show = FALSE)
 
@@ -95,21 +121,25 @@ coverteam1$yards_given_up <- round(coverteam1$yards_given_up, 2)
 coverteam1$yards_expected_diff <- round(coverteam1$yards_expected_diff, 2)
 # join team logos to dataset
 coverteam1 <- coverteam1 %>%
-  left_join(teams_colors_logos$team_logo_espn, by = c('possessionTeam' = 'team_abbr'))
+  left_join(teams_colors_logos, by = c('possessionTeam' = 'team_abbr'))
 coverteam1 <- coverteam1 %>%
-  select(possessionTeam, team_logo_espn, n, yards_given_up, yards_expected_diff, yards_expected)
+  select(possessionTeam, team_logo_espn, n, yards_given_up, yards_expected, yards_expected_diff)
 
 
 #Plot
 reactable(
   coverteam1,
   columns = list(
-    possessionTeam = colDef(name = "Team"),
+    possessionTeam = colDef(show = FALSE),
     n = colDef(name = "Returns"),
     yards_given_up = colDef(name = "Avg Yards Given Up Per Return"),
     yards_expected_diff = colDef(name = "Avg +/-"),
-    yards_expected = colDef(name = "Avg Return Yards Expected"),
-    team_logo_espn = colDef(cell = embed_img())
+    yards_expected = colDef(name = "Avg Return Yards Expected",
+                                  cell = color_tiles(
+                                  bestworst1,
+                                  colors = c("#d7191c", "#ffffbf", "#1a9641"),
+                                  number_fmt = scales::number_format(accuracy = 0.01))),
+    team_logo_espn = colDef(name = "Team", cell = embed_img(coverteam1, label = "possessionTeam"))
       )
 )
 ```
@@ -126,6 +156,11 @@ returnteam1 <- full.preds %>%
 returnteam1$yards_expected <- round(returnteam1$yards_expected, 2)
 returnteam1$actual_return_yards <- round(returnteam1$actual_return_yards, 2)
 returnteam1$yards_expected_diff <- round(returnteam1$yards_expected_diff, 2)
+# join team logos to dataset
+returnteam1 <- returnteam1 %>%
+  left_join(teams_colors_logos, by = c('possessionTeam' = 'team_abbr'))
+returnteam1 <- returnteam1 %>%
+  select(returnerTeam, team_logo_espn, n, yards_given_up, yards_expected, yards_expected_diff)
 
 #Plot
 reactable(
