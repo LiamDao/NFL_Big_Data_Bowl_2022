@@ -155,7 +155,6 @@ mae(train.preds$XGBpreds, train.preds$kickReturnYardage)
 
 #Train MAE of 4.835
 
-
 #Variable importance
 imp.h = merge(imp.h1[,c(1,2)], imp.h2[,c(1,2)], by = "Feature", all = TRUE)
 imp.h$Gain.x = ifelse(is.na(imp.h$Gain.x), 0, imp.h$Gain.x)
@@ -243,7 +242,6 @@ train.preds = merge(train.preds, train2[c(37:39)],by = c("gameId", "playId") )
 mae(train.preds$kickReturnYardage, train.preds$NNpreds)
 #MAE of 5.155 on train
 
-
 nn.yard.val.predict <- predict(nn.yard.model, newdata = val2)
 
 # Calculate RMSE and MAE on scaled target
@@ -256,7 +254,6 @@ val.preds.nn$NNpreds = sd(train$kickReturnYardage, na.rm = TRUE) * nn.yard.val.p
 
 mae(val$kickReturnYardage, val.preds.nn$NNpreds)
 #MAE of 7.074 on val after unscaling predictions
-
 
 #Variable importance
 imp.nn.garson = garson(nn.yard.model)
@@ -352,7 +349,6 @@ mae(train.preds$kickReturnYardage, (train.preds$XGBpreds + train.preds$NNpreds +
 mae(val.preds$kickReturnYardage, (val.preds$XGBpreds + val.preds$NNpreds + val.preds$OFFpreds)/3)
 #MAE of 5.967
 
-
 #Linear model ensemble
 lm.ensemble = lm(kickReturnYardage ~ XGBpreds + NNpreds + OFFpreds, data = train.preds)
 lm.ensemble
@@ -361,8 +357,10 @@ val.preds$ENS_LMpreds = predict(lm.ensemble, val.preds)
 
 mae(train.preds$kickReturnYardage, train.preds$ENS_LMpreds)
 #MAE of 4.07
+
 mae(val.preds$kickReturnYardage, val.preds$ENS_LMpreds)
 #MAE of 6.832
+
 
 
 #Neural Network Ensemble
@@ -373,8 +371,10 @@ val.preds$ENS_NNpreds = predict(nn.ensemble, val.preds)
 
 mae(train.preds$kickReturnYardage, train.preds$ENS_NNpreds)
 #MAE of 6.607 on train
+
 mae(val.preds$kickReturnYardage, val.preds$ENS_NNpreds)
 #MAE of 6.756 on val
+
 ```
 
 ################## Run final averaged ensemble model on test set #######################
@@ -433,26 +433,7 @@ test.preds = merge(test.preds, test.off.preds[c(1,2,105)], by = c("gameId", "pla
 #Simple average
 mae(test.preds$kickReturnYardage, (test.preds$XGBpreds + test.preds$NNpreds + test.preds$OFFpreds)/3)
 #MAE of 5.663
-#6.251 def
-#6.328 NN
-#5.886 off
 
-train.lm = train[,c(3:39,51:63,65:104)]
-lm.naive = lm(kickReturnYardage ~ . ,data = train.lm)
-train.lm$lmpreds = predict(lm.naive)
-mae(train.lm$kickReturnYardage, train.lm$lmpreds)
-
-val.lm = val[,c(3:39,51:63,65:104)]
-val.lm$lmpreds = predict(lm.naive, val.lm)
-mae(val.lm$kickReturnYardage, val.lm$lmpreds)
-
-test.lm = test[,c(3:39,51:63,65:104)]
-test.lm$lmpreds = predict(lm.naive, test.lm)
-mae(test.lm$kickReturnYardage, test.lm$lmpreds)
-
-full.lm = full_set[,c(3:39,51:63,65:104)]
-full.lm$lmpreds = predict(lm.naive, full.lm)
-mae(full.lm$kickReturnYardage, full.lm$lmpreds)
 ```
 
 
@@ -541,6 +522,7 @@ full.preds = merge(full.preds, full3[c(1,2,134)], by = c("gameId", "playId"))
 
 ```{r}
 full.preds$ENS_AVGpreds = (full.preds$NNpreds + full.preds$XGBpreds + full.preds$OFFpreds)/3
+
 
 full.preds$yard_dif = full.preds$kickReturnYardage - full.preds$ENS_AVGpreds
 
