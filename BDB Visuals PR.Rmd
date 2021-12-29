@@ -20,7 +20,7 @@ library(reactablefmtr)
 
 ```{r, include = FALSE}
 #Load in Trevor's final ensemble file
-full.preds <- read.csv("~/Documents/Documents/R Projects/full preds.txt")
+full.preds <- read.csv("C:/Users/liamd/Documents/GitHub/NFL_Big_Data_Bowl_2022/data_folder/full preds.csv")
 #Drop X column
 full.preds = full.preds %>% select(-"X")
 
@@ -176,3 +176,14 @@ reactable(
 )
 
 ```
+
+# Subset playground 
+```{r}
+temp_CAR <- full.preds %>% 
+  filter(possessionTeam == "CAR") %>% 
+  relocate(possessionTeam, .after = last_col()) %>% 
+  relocate(gameId, .after = last_col()) %>% 
+  relocate(playId, .after = last_col()) %>% 
+  relocate(kickReturnYardage, .after = last_col())
+```
+
