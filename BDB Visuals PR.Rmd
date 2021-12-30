@@ -41,11 +41,7 @@ full.preds$homeTeamAbbr = ifelse(full.preds$homeTeamAbbr == "OAK", "LV", full.pr
 
 ```
 
-
-## Testing out reactable package
-
-# First Visual:
-- Table for player ranking
+# First Visual: Table for player ranking with team & Table for player ranking without team
 ```{r Player Ranking, echo = FALSE}
 
 #Find best & worst returners with Team
@@ -71,6 +67,7 @@ bestworst1 <- bestworst1 %>%
 reactable(
   bestworst1,
   outlined = TRUE, borderless = TRUE, striped = TRUE, showSortable = TRUE,
+  defaultPageSize = 16,
   paginationType = "simple",
   language = reactableLang(
     searchPlaceholder = "Search...",
@@ -139,6 +136,7 @@ bestworst2 <- bestworst2 %>%
 reactable(
   bestworst2,
   outlined = TRUE, borderless = TRUE, striped = TRUE, showSortable = TRUE,
+  defaultPageSize = 16,
   paginationType = "simple",
   language = reactableLang(
     searchPlaceholder = "Search...",
@@ -170,13 +168,8 @@ reactable(
 
 
 ```
-Can 100% make this prettier, this is just a base for now. Reactable pacakge has some crazy functionality.
-- Conditional Styling
-- Logo Addition based on team abbreviation
 
-
-# Second Visual:
-- Table for team ranking getting in position
+# Second Visual: Table for team punt coverage ranking
 ```{r Cover Team Ranking, echo=FALSE}
 #Find best & worst teams with getting in position
 coverteam1 <- full.preds %>% 
@@ -197,6 +190,7 @@ coverteam1 <- coverteam1 %>%
 reactable(
   coverteam1,
   outlined = TRUE, borderless = TRUE, striped = TRUE, showSortable = TRUE,
+  defaultPageSize = 16,
   paginationType = "simple",
   language = reactableLang(
     searchPlaceholder = "Search...",
@@ -228,8 +222,7 @@ reactable(
 ```
 
 
-# Third Visual:
-- Table for team with punt coverage compared to expected
+# Third Visual: Table for team punt blocking ranking
 ```{r Return Team Ranking, echo = FALSE}
 #Find best & worst teams with getting in position
 returnteam1 <- full.preds %>% 
@@ -249,6 +242,7 @@ returnteam1 <- returnteam1 %>%
 reactable(
   returnteam1,
   outlined = TRUE, borderless = TRUE, striped = TRUE, showSortable = TRUE,
+  defaultPageSize = 16,
   paginationType = "simple",
   language = reactableLang(
     searchPlaceholder = "Search...",
@@ -279,7 +273,7 @@ reactable(
 
 ```
 
-#Testing to see if we can Nest Teams with an aggregate to see who the best returners are for each team
+# Testing to see if we can Nest Teams with an aggregate to see who the best returners are for each team
 ```{r Test, echo = FALSE}
 #Nesting by Team
 #Find best & worst returners with Team
@@ -305,6 +299,7 @@ bestworst3 <- bestworst3 %>%
 reactable(
   bestworst3,
   outlined = TRUE, borderless = TRUE, striped = TRUE, showSortable = TRUE,
+  defaultPageSize = 16,
   language = reactableLang(
     searchPlaceholder = "Search...",
     noData = "No entries found",
@@ -336,12 +331,4 @@ reactable(
 )
 
 ```
-#Subset playground 
-```{r}
-temp_CAR <- full.preds %>% 
-  filter(possessionTeam == "CAR") %>% 
-  relocate(possessionTeam, .after = last_col()) %>% 
-  relocate(gameId, .after = last_col()) %>% 
-  relocate(playId, .after = last_col()) %>% 
-  relocate(kickReturnYardage, .after = last_col())
-```
+# Will play around with this visual some more and see if I can get it to where it looks like "Visual 3" with a dropdown menu for each team to look an individual returners.
