@@ -8,6 +8,7 @@ output: html_document
 ```{r setup, include=FALSE}
 #load libraries
 #install.packages("nflfastR")
+library(dplyr)
 library(nflfastR)
 library(gsisdecoder)
 library(ggimage)
@@ -20,7 +21,7 @@ library(reactablefmtr)
 
 ```{r, include = FALSE}
 #Load in Trevor's final ensemble file
-full.preds <- read.csv("C:/Users/liamd/Documents/GitHub/NFL_Big_Data_Bowl_2022/data_folder/full preds.csv")
+full.preds <- read.csv("~/Documents/Documents/R Projects/full preds.txt")
 #Drop X column
 full.preds = full.preds %>% select(-"X")
 
@@ -34,6 +35,9 @@ full.preds$returnerTeam = ifelse(full.preds$returnerTeam == "OAK", "LV", full.pr
 full.preds$visitorTeamAbbr = ifelse(full.preds$visitorTeamAbbr == "OAK", "LV", full.preds$visitorTeamAbbr)
 full.preds$homeTeamAbbr = ifelse(full.preds$homeTeamAbbr == "OAK", "LV", full.preds$homeTeamAbbr)
 
+#Define rounding function
+#specify_decimal <- function(x, k) trimws(format(round(x, k), nsmall=k))
+
 
 ```
 
@@ -44,7 +48,7 @@ full.preds$homeTeamAbbr = ifelse(full.preds$homeTeamAbbr == "OAK", "LV", full.pr
 - Table for player ranking
 ```{r Player Ranking, echo = FALSE}
 
-#Find best & worst returners
+#Find best & worst returners with Team
 bestworst1 <- full.preds %>% 
   group_by(returnerId, returnerTeam, punt_returner_player_name) %>%
   summarise(n = n(), actual_yards = mean(kickReturnYardage), expected_yards = mean(ENS_AVGpreds), yards_over_expected = mean(yard_dif)) %>%
@@ -66,25 +70,22 @@ bestworst1 <- bestworst1 %>%
 #Plot
 reactable(
   bestworst1,
-  columns = list(
-    n = colDef(name = "Returns"),
-    returnerTeam = colDef(show = FALSE),
-    punt_returner_player_name = colDef(show = FALSE),
-    actual_yards = colDef(name = "Avg Actual Yards"),
-    expected_yards = colDef(name = "Avg Expected Yards"),
-    yards_over_expected = colDef(name = "Avg Yards Over Expected",
-                                 cell = data_bars_pos_neg(
-                                  bestworst1,
-                                  colors = c("#d7191c", "#ffffbf", "#1a9641"),
-                                  number_fmt = scales::number_format(accuracy = 0.01))),
-    team_logo_espn = colDef(name = "Player", cell = embed_img(bestworst1, label = "punt_returner_player_name")),
-    returnerId = colDef(show = FALSE)
-
-  )
-)
-
-reactable(
-  bestworst1,
+  outlined = TRUE, borderless = TRUE, striped = TRUE, showSortable = TRUE,
+  paginationType = "simple",
+  language = reactableLang(
+    searchPlaceholder = "Search...",
+    noData = "No entries found",
+    pageInfo = "{rowStart} to {rowEnd} of {rows} entries",
+    pagePrevious = "\u276e",
+    pageNext = "\u276f",
+    pagePreviousLabel = "Previous page",
+    pageNextLabel = "Next page"
+  ),
+  theme = reactableTheme(
+    headerStyle = list(
+      "&:hover[aria-sort]" = list(background = "hsl(0, 0%, 96%)"),
+      "&[aria-sort='ascending'], &[aria-sort='descending']" = list(background = "hsl(0, 0%, 96%)"),
+      borderColor = "#555")),
   columns = list(
     n = colDef(name = "Returns"),
     returnerTeam = colDef(show = FALSE),
@@ -98,13 +99,75 @@ reactable(
                                   number_fmt = scales::number_format(accuracy = 0.01))),
     team_logo_espn = colDef(name = "Player", cell = embed_img(bestworst1, label = "punt_returner_player_name")),
     returnerId = colDef(show = FALSE)
-
   )
 )
 
 #Problems so far
 #Might not be able to summarize by team as some returners left their teams midseason:
 #see Adam Humphries?
+
+################################################################################################
+
+#Find best & worst returners (without Team)
+bestworst2 <- full.preds %>% 
+  group_by(returnerId, punt_returner_player_name) %>%
+  summarise(n = n(), actual_yards = mean(kickReturnYardage), expected_yards = mean(ENS_AVGpreds), yards_over_expected = mean(yard_dif)) %>%
+  filter(n >= 10) %>%
+  arrange(desc(yards_over_expected))
+
+bestworst2$actual_yards <- format(round(bestworst2$actual_yards, 2), nsmall = 2)
+options(digits=2)
+bestworst2$actual_yards <- as.numeric(bestworst2$actual_yards)
+  #round(bestworst2$actual_yards, 2) 
+
+bestworst2$expected_yards <- format(round(bestworst2$expected_yards, 2), nsmall = 2)
+options(digits=2)
+bestworst2$expected_yards <- as.numeric(bestworst2$expected_yards)
+  #round(bestworst2$expected_yards, 2)
+
+bestworst2$yards_over_expected <- format(round(bestworst2$yards_over_expected, 2), nsmall = 2)
+options(digits=2)
+bestworst2$yards_over_expected <- as.numeric(bestworst2$yards_over_expected)
+  #round(bestworst2$yards_over_expected, 2)
+
+#trying to get it uniform, can't get it yet, tried this but it messed up the sorting
+#bestworst1$yards_over_expected <- format(round(bestworst1$yards_over_expected, 2), nsmall = 2)
+# join team logos to dataset
+bestworst2 <- bestworst2 %>%
+  select(returnerId, punt_returner_player_name, n, actual_yards, expected_yards, yards_over_expected)
+
+reactable(
+  bestworst2,
+  outlined = TRUE, borderless = TRUE, striped = TRUE, showSortable = TRUE,
+  paginationType = "simple",
+  language = reactableLang(
+    searchPlaceholder = "Search...",
+    noData = "No entries found",
+    pageInfo = "{rowStart} to {rowEnd} of {rows} entries",
+    pagePrevious = "\u276e",
+    pageNext = "\u276f",
+    pagePreviousLabel = "Previous page",
+    pageNextLabel = "Next page"
+  ),
+  theme = reactableTheme(
+    headerStyle = list(
+      "&:hover[aria-sort]" = list(background = "hsl(0, 0%, 96%)"),
+      "&[aria-sort='ascending'], &[aria-sort='descending']" = list(background = "hsl(0, 0%, 96%)"),
+      borderColor = "#555")),  columns = list(
+    n = colDef(name = "Returns"),
+    punt_returner_player_name = colDef(name = "Player"),
+    actual_yards = colDef(name = "Avg Actual Yards"),
+    expected_yards = colDef(name = "Avg Expected Yards"),
+    yards_over_expected = colDef(name = "Avg Yards Over Expected",
+                                 cell = color_tiles(
+                                  bestworst2,
+                                  colors = c("#d7191c", "#ffffbf", "#1a9641"),
+                                  number_fmt = scales::number_format(accuracy = 0.01))),
+    returnerId = colDef(show = FALSE)
+
+  )
+)
+
 
 ```
 Can 100% make this prettier, this is just a base for now. Reactable pacakge has some crazy functionality.
@@ -133,15 +196,35 @@ coverteam1 <- coverteam1 %>%
 #Plot
 reactable(
   coverteam1,
-  columns = list(
+  outlined = TRUE, borderless = TRUE, striped = TRUE, showSortable = TRUE,
+  paginationType = "simple",
+  language = reactableLang(
+    searchPlaceholder = "Search...",
+    noData = "No entries found",
+    pageInfo = "{rowStart} to {rowEnd} of {rows} entries",
+    pagePrevious = "\u276e",
+    pageNext = "\u276f",
+    pagePreviousLabel = "Previous page",
+    pageNextLabel = "Next page"
+  ),
+  theme = reactableTheme(
+    headerStyle = list(
+      "&:hover[aria-sort]" = list(background = "hsl(0, 0%, 96%)"),
+      "&[aria-sort='ascending'], &[aria-sort='descending']" = list(background = "hsl(0, 0%, 96%)"),
+      borderColor = "#555")),  columns = list(
     possessionTeam = colDef(show = FALSE),
-    n = colDef(name = "Returns"),
-    yards_given_up = colDef(name = "Avg Yards Given Up Per Return"),
-    yards_expected_diff = colDef(name = "Avg +/-"),
-    yards_expected = colDef(name = "Avg Return Yards Expected"),
-    team_logo_espn = colDef(name = "Team", cell = embed_img(coverteam1, label = "possessionTeam"))
+    n = colDef(maxWidth = 100, name = "Returns"),
+    yards_given_up = colDef(name = "Yards Allowed Per Return"),
+    yards_expected_diff = colDef(name = "Average Difference",
+                                 cell = color_tiles(
+                                  coverteam1,
+                                  colors = c("#1a9641", "#ffffbf", "#d7191c"),
+                                  number_fmt = scales::number_format(accuracy = 0.01))),
+    yards_expected = colDef(name = "Expected Yards Allowed Per Return"),
+    team_logo_espn = colDef(maxWidth = 100, name = "Team", cell = embed_img(coverteam1, label = "possessionTeam"))
       )
 )
+
 ```
 
 
@@ -165,19 +248,95 @@ returnteam1 <- returnteam1 %>%
 #Plot
 reactable(
   returnteam1,
-  columns = list(
-    returnerTeam = colDef(name = "Team"),
-    n = colDef(name = "Returns"),
-    actual_return_yards = colDef(name = "Avg Yards Per Return"),
-    yards_expected_diff = colDef(name = "Avg +/-"),
-    yards_expected = colDef(name = "Avg Return Yards Expected"),
-    team_logo_espn = colDef(cell = embed_img())
+  outlined = TRUE, borderless = TRUE, striped = TRUE, showSortable = TRUE,
+  paginationType = "simple",
+  language = reactableLang(
+    searchPlaceholder = "Search...",
+    noData = "No entries found",
+    pageInfo = "{rowStart} to {rowEnd} of {rows} entries",
+    pagePrevious = "\u276e",
+    pageNext = "\u276f",
+    pagePreviousLabel = "Previous page",
+    pageNextLabel = "Next page"
+  ),
+  theme = reactableTheme(
+    headerStyle = list(
+      "&:hover[aria-sort]" = list(background = "hsl(0, 0%, 96%)"),
+      "&[aria-sort='ascending'], &[aria-sort='descending']" = list(background = "hsl(0, 0%, 96%)"),
+      borderColor = "#555")),  columns = list(
+    returnerTeam = colDef(show = FALSE),
+    n = colDef(maxWidth = 100, name = "Returns"),
+    actual_return_yards = colDef(name = "Yards Per Return"),
+    yards_expected_diff = colDef(name = "Average Difference",
+                                 cell = color_tiles(
+                                  returnteam1,
+                                  colors = c("#d7191c", "#ffffbf" ,"#1a9641"),
+                                  number_fmt = scales::number_format(accuracy = 0.01))),
+    yards_expected = colDef(name = "Expected Yards Per Return"),
+    team_logo_espn = colDef(maxWidth = 100, name = "Team", cell = embed_img(returnteam1, label = "returnerTeam"))
   )
 )
 
 ```
 
-# Subset playground 
+#Testing to see if we can Nest Teams with an aggregate to see who the best returners are for each team
+```{r Test, echo = FALSE}
+#Nesting by Team
+#Find best & worst returners with Team
+bestworst3 <- full.preds %>% 
+  group_by(returnerId, returnerTeam, punt_returner_player_name) %>%
+  summarise(n = n(), actual_yards = mean(kickReturnYardage), expected_yards = mean(ENS_AVGpreds), yards_over_expected = mean(yard_dif)) %>%
+  filter(n >= 10) %>%
+  arrange(desc(yards_over_expected))
+
+bestworst3$actual_yards <- round(bestworst3$actual_yards, 2)
+bestworst3$expected_yards <- round(bestworst3$expected_yards, 2)
+bestworst3$yards_over_expected <- round(bestworst3$yards_over_expected, 2)
+#trying to get it uniform, can't get it yet, tried this but it messed up the sorting
+#bestworst1$yards_over_expected <- format(round(bestworst1$yards_over_expected, 2), nsmall = 2)
+# join team logos to dataset
+bestworst3 <- bestworst3 %>%
+  left_join(teams_colors_logos, by = c('returnerTeam' = 'team_abbr'))
+bestworst3 <- bestworst3 %>%
+  select(returnerId, returnerTeam, team_logo_espn, punt_returner_player_name, n, actual_yards, expected_yards, yards_over_expected)
+
+
+#Plot
+reactable(
+  bestworst3,
+  outlined = TRUE, borderless = TRUE, striped = TRUE, showSortable = TRUE,
+  language = reactableLang(
+    searchPlaceholder = "Search...",
+    noData = "No entries found",
+    pageInfo = "{rowStart} to {rowEnd} of {rows} entries",
+    pagePrevious = "\u276e",
+    pageNext = "\u276f",
+    pagePreviousLabel = "Previous page",
+    pageNextLabel = "Next page"
+  ),
+  groupBy = "returnerTeam",
+  columns = list(
+    n = colDef(name = "Returns"),
+    returnerTeam = colDef(show = FALSE),
+    punt_returner_player_name = colDef(show = FALSE),
+    actual_yards = colDef(name = "Avg Actual Yards"),
+    expected_yards = colDef(name = "Avg Expected Yards"),
+    team_logo_espn = colDef(name = "Team", cell = embed_img(bestworst1, label = "punt_returner_player_name")),
+    returnerId = colDef(show = FALSE),
+    yards_over_expected = colDef(name = "Avg Yards Over Expected",
+                                 cell = color_tiles(
+                                  bestworst1,
+                                  colors = c("#d7191c", "#ffffbf", "#1a9641"),
+                                  number_fmt = scales::number_format(accuracy = 0.01)),
+                                 aggregate = "sum",
+      # Render aggregated cell as currency
+      aggregated = JS("function(cellInfo) {
+        return cellInfo.value.toFixed(2)
+      }")))
+)
+
+```
+#Subset playground 
 ```{r}
 temp_CAR <- full.preds %>% 
   filter(possessionTeam == "CAR") %>% 
@@ -186,4 +345,3 @@ temp_CAR <- full.preds %>%
   relocate(playId, .after = last_col()) %>% 
   relocate(kickReturnYardage, .after = last_col())
 ```
-
