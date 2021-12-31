@@ -85,8 +85,8 @@ df_plays_punts <- df_plays %>%
 ## Animating Plays
 ```{r}
 # Enter the gameID and the playID for the rest of the code to filter for:
-game = 2019122207
-play = 511
+game = 2019092208
+play = 1338
 
 #loading command to make NFL field in ggplot (credit to Marschall Furman)
 source('https://raw.githubusercontent.com/mlfurman3/gg_field/main/gg_field.R')
@@ -156,5 +156,25 @@ anim <- ggplot() +
         ease_aes('linear') + 
         NULL 
 
-animate(anim, width = 720, height = 440, fps = 10, nframe = nFrames,renderer=gifski_renderer("test.gif"))
+animate(anim, width = 720, height = 440, fps = 10, nframe = nFrames,renderer=gifski_renderer("saints_good_coverage.gif"))
 ```
+> Plays selected
+- Best Kicking Team: Saints
+    GameId: 2019102009 Runner-up(2020112206)
+    playId: 2417 Runner-up(1414)
+- Worst Kicking Team: Panthers
+    GameId: 2019092208
+    playId: 1338
+- Best Return Team: Colts 
+    GameId: 2019122207
+    playId: 511
+- Worst Return Team: Cowboys
+    GameId: 2019091509
+    playId: 197
+
+## Selecting a play
+```{r}
+nyheim <- df_plays_punts %>% 
+    filter(returnerId == 46173)
+```
+
