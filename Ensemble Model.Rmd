@@ -19,6 +19,7 @@ library(Ckmeans.1d.dp)
 library(nnet)
 library(NeuralNetTools)
 library(Metrics)
+library(MLmetrics)
 
 # Create scaling function for variable importance
 scale_01 <- function(x) {                              
@@ -31,6 +32,7 @@ scale_01 <- function(x) {
 final_set = read.csv("C:\\Users\\thughes\\Documents\\final set.csv")
 full_set = read.csv("C:\\Users\\thughes\\Documents\\full set.csv")
 
+#Only if there is an arbitrary "X" variable in first column after reading in data 
 final_set = final_set %>% select(-"X")
 full_set = full_set %>% select(-"X")
 
@@ -99,7 +101,7 @@ for (i in 1:2){
   else {
     train.h = train %>% filter(return_x >= 28)
   }
-  #No sides or zones of defenders included
+  #No sides or zones of defenders included, no receive team data besides the returner
   train_x = model.matrix(kickReturnYardage ~ ., 
                          data = train.h[,c(3:5, 7:39,62,63,65:70 )])[,-1]
   train_y = train.h$kickReturnYardage
@@ -418,7 +420,7 @@ test.preds.nn = test
 test.preds.nn$NNpreds = sd(train$kickReturnYardage, na.rm = TRUE) * nn.yard.test.predict + mean(train$kickReturnYardage, na.rm = TRUE)
 
 
-###Get test predictions for defensive XGBoost
+###Get test predictions for offensive XGBoost
 test.off.preds = test
 
 test_x = model.matrix(kickReturnYardage ~ ., data = test[,c(3:5,62,63,65:100  )])[,-1]
@@ -455,7 +457,7 @@ imp.ensemble$scaledImpOff = ifelse(is.na(imp.ensemble$scaledImpOff), 0, imp.ense
 imp.ensemble$avgScaledImp = (imp.ensemble$scaledImpHalf + imp.ensemble$scaledImpNN + imp.ensemble$scaledImpOff)/3
 imp.ensemble = imp.ensemble %>% arrange(desc(avgScaledImp))
 
-
+write.csv(imp.ensemble, "C:\\Users\\thughes\\Documents\\ensemble importance.csv")
 ```
 
 
@@ -523,8 +525,9 @@ full.preds = merge(full.preds, full3[c(1,2,134)], by = c("gameId", "playId"))
 ```{r}
 full.preds$ENS_AVGpreds = (full.preds$NNpreds + full.preds$XGBpreds + full.preds$OFFpreds)/3
 
-
 full.preds$yard_dif = full.preds$kickReturnYardage - full.preds$ENS_AVGpreds
+
+write.csv(full.preds, "C:\\Users\\thughes\\Documents\\full preds.csv")
 
 #Find best & worst returners
 full.preds %>% group_by(returnerId, punt_returner_player_name) %>% summarise(yards_over_expected = mean(yard_dif)) %>% arrange(desc(yards_over_expected))
@@ -535,5 +538,6 @@ full.preds %>% group_by(possessionTeam) %>% summarise(yards_expected = mean(ENS_
 #Find best & worst teams with punt coverage compared to expected
 full.preds %>% group_by(possessionTeam) %>% summarise(yards_over_expected = mean(yard_dif)) %>% arrange(desc(yards_over_expected))
 
-
+p = 5.64021
+format(p, 2)
 ```
