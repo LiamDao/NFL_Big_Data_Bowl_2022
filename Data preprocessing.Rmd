@@ -16,6 +16,7 @@ library(stringr)
 ############################### Data Prep ###############################
 #read in data
 ```{r}
+#Returned datasets were created in Data Subsetting.ipynb
 returned2018 = read.csv("C:\\Users\\thughes\\Documents\\returned2018.csv")
 returned2019 = read.csv("C:\\Users\\thughes\\Documents\\returned2019.csv")
 returned2020 = read.csv("C:\\Users\\thughes\\Documents\\returned2020.csv")
@@ -286,6 +287,7 @@ epa = rbind(epa2018, epa2019, epa2020)
 epa$gameId = epa$old_game_id
 epa$playId = epa$play_id
 
+#Impute wind and temp values for indoor stadiums
 epa$wind = ifelse(is.na(epa$wind), 0, epa$wind)
 epa$temp = ifelse(is.na(epa$temp), 70, epa$temp)
 
@@ -316,10 +318,11 @@ final_set =  merge( all_players, received_model_vars[!duplicated(received_model_
 final_set = merge(final_set, model_set_off, by = c("gameId", "playId"))
 final_set =  merge( final_set, epa_model_vars[!duplicated(epa_model_vars), ], by = c("gameId", "playId"))
 
+#Drop off1 data since we already have returner info
 final_set = final_set %>% select(-c(off1_s, off1_a, off1_dist))
 
 #Write out to csvs
-write.csv(final_set, "C:\\Users\\thughes\\Documents\\model set.csv")
+write.csv(final_set, "C:\\Users\\thughes\\Documents\\final set.csv")
 
 ```
 
