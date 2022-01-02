@@ -19,4 +19,6 @@ Here is what included in each folder and file:
 * Rankings Visuals (R file) -> code to create ranking visuals for returners, receiving teams, and kicking teams.
 
 
+There are more files in the 'Archive' branch that include all of our code used throughout every stage of the project. Apologies for that branch not being very clean, but the file names should be rougly self explanatory.
+
 We hope you enjoy our submission!
