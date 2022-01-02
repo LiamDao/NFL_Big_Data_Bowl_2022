@@ -10,9 +10,9 @@ average punt return length, and gain deeper insights into NFL punting plays.
 Here is what included in each folder and file:
 
 
-*data_folder (folder) -> contains all data used in our files.
+* data_folder (folder) -> contains all data used in our files.
 
-*example_plays_gif (folder) -> contains some example GIF plays using the 'Play GIF Visuals' file. The example plays included highlight some interesting punt plays that we found.
+* example_plays_gif (folder) -> contains some example GIF plays using the 'Play GIF Visuals' file. The example plays included highlight some interesting punt plays that we found.
 
 Data subsetting (Python file) -> file used to subset our data for validation, training, and test sets.
 
